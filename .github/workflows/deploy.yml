@@ -48,7 +48,7 @@ jobs:
           WM_WS:       ${{ secrets.WINDMILL_WORKSPACE }}
           WM_BASE_URL: ${{ secrets.WINDMILL_BASE_URL }}
         run: |
-          wmill workspace add myworkspace \
+          wmill workspace add $WM_WS \
             --token $WM_TOKEN \
             --base-url $WM_BASE_URL
 
@@ -57,7 +57,7 @@ jobs:
         env:
           WM_TOKEN: ${{ secrets.WINDMILL_TOKEN }}
         run: |
-          wmill script push --workspace myworkspace \
+          wmill script push --workspace $WM_WS \
             --token $WM_TOKEN \
             windmill/scripts/run_pipeline.py \
             u/admin/run_pipeline

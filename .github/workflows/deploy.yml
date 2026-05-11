@@ -71,6 +71,19 @@ jobs:
           test -f windmill/scripts/run_pipeline.py || (echo "Script file not found" && exit 1)
 
       # --------------------------------------------------------
+      # 7. Connection Windmill Job Test
+      # --------------------------------------------------------
+
+      - name: Test Windmill Connection
+        run: |
+          echo "Testing Windmill..."
+
+          echo "Base URL:"
+          echo "$WM_BASE_URL"
+
+          curl -v "$WM_BASE_URL/api/version"
+
+      # --------------------------------------------------------
       # 7. Trigger Windmill Job
       # --------------------------------------------------------
       - name: Trigger Windmill Job
@@ -81,30 +94,50 @@ jobs:
         run: |
 
           echo "Triggering Windmill job..."
-
-          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-            "${{ secrets.WINDMILL_BASE_URL }}/api/w/${{ secrets.WINDMILL_WORKSPACE }}/jobs/run/p/u/admin/run_pipeline" \
-            -H "Authorization: Bearer ${{ secrets.WINDMILL_TOKEN }}" \
+          echo "Base URL: ${WM_BASE_URL:0:20}... (truncated)"
+          echo "Workspace: $WM_WS"
+          
+          # Create JSON payload
+          PAYLOAD=$(cat <<EOF
+          {
+            "db_host": "postgres",
+            "db_port": 5432,
+            "db_user": "windmill",
+            "db_password": "windmill123",
+            "db_name": "windmill_db",
+            "smtp_user": "$EMAIL_USER",
+            "smtp_pass": "$EMAIL_PASS",
+            "notify_email": "$NOTIFY_EMAIL"
+          }
+          EOF
+          )
+          
+          # Construct API URL
+          API_URL="${WM_BASE_URL}/api/w/${WM_WS}/jobs/run/p/u/admin/run_pipeline"
+          
+          echo "Making request to: ${API_URL:0:50}... (truncated)"
+          
+          # Make the request with verbose output
+          RESPONSE=$(curl -v -X POST "$API_URL" \
+            -H "Authorization: Bearer ${WM_TOKEN}" \
             -H "Content-Type: application/json" \
-            -d '{
-              "db_host": "postgres",
-              "db_port": 5432,
-              "db_user": "windmill",
-              "db_password": "windmill123",
-              "db_name": "windmill_db",
-              "smtp_user": "'"$EMAIL_USER"'",
-              "smtp_pass": "'"$EMAIL_PASS"'",
-              "notify_email": "'"$NOTIFY_EMAIL"'"
-            }')
-
-          BODY=$(echo "$RESPONSE" | head -n 1)
-          STATUS=$(echo "$RESPONSE" | tail -n 1)
-
+            -d "$PAYLOAD" 2>&1)
+          
+          echo "Response:"
+          echo "$RESPONSE"
+          
+          # Extract HTTP status code if available
+          STATUS=$(echo "$RESPONSE" | grep "< HTTP" | tail -1 | awk '{print $3}')
+          
+          if [ -z "$STATUS" ]; then
+            echo "❌ Failed to connect to Windmill. Check WINDMILL_BASE_URL and ngrok tunnel status."
+            exit 1
+          fi
+          
           echo "HTTP Status: $STATUS"
-          echo "Response: $BODY"
-
+          
           if [ "$STATUS" -lt 200 ] || [ "$STATUS" -ge 300 ]; then
-            echo "❌ Windmill job trigger failed"
+            echo "❌ Windmill job trigger failed with status $STATUS"
             exit 1
           fi
           

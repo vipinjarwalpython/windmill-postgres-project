@@ -57,8 +57,10 @@ jobs:
         env:
           WM_TOKEN: ${{ secrets.WINDMILL_TOKEN }}
         run: |
-          wmill script push windmill/scripts/run_pipeline.py u/admin/run_pipeline \
-            --workspace myworkspace
+          wmill script push --workspace myworkspace \
+            --token $WM_TOKEN \
+            windmill/scripts/run_pipeline.py \
+            u/admin/run_pipeline
 
       # ── 5. Trigger Windmill job via REST ─────────────────────
       - name: Trigger Windmill Job

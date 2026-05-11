@@ -67,22 +67,11 @@ jobs:
       # --------------------------------------------------------
       - name: Check script file
         run: |
-          ls -la
+          ls -la windmill/scripts/
           test -f windmill/scripts/run_pipeline.py || (echo "Script file not found" && exit 1)
 
       # --------------------------------------------------------
-      # 7. Deploy script to Windmill
-      # --------------------------------------------------------
-      - name: Deploy script to Windmill
-        run: |
-          wmill script push \
-            windmill/scripts/run_pipeline.py \
-            --workspace "$WM_WS" \
-            --token "$WM_TOKEN" \
-            --base-url "$WM_BASE_URL"
-
-      # --------------------------------------------------------
-      # 8. Trigger Windmill Job
+      # 7. Trigger Windmill Job
       # --------------------------------------------------------
       - name: Trigger Windmill Job
         env:
@@ -94,21 +83,19 @@ jobs:
           echo "Triggering Windmill job..."
 
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-            "$WM_BASE_URL/api/w/$WM_WS/jobs/run/p/u/admin/run_pipeline" \
-            -H "Authorization: Bearer $WM_TOKEN" \
+            "${{ secrets.WINDMILL_BASE_URL }}/api/w/${{ secrets.WINDMILL_WORKSPACE }}/jobs/run/p/u/admin/run_pipeline" \
+            -H "Authorization: Bearer ${{ secrets.WINDMILL_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d "{
-              \"db\": {
-                \"host\": \"postgres\",
-                \"port\": 5432,
-                \"user\": \"windmill\",
-                \"password\": \"windmill123\",
-                \"dbname\": \"windmill_db\"
-              },
-              \"smtp_user\": \"$EMAIL_USER\",
-              \"smtp_pass\": \"$EMAIL_PASS\",
-              \"notify_email\": \"$NOTIFY_EMAIL\"
-            }")
+            -d '{
+              "db_host": "postgres",
+              "db_port": 5432,
+              "db_user": "windmill",
+              "db_password": "windmill123",
+              "db_name": "windmill_db",
+              "smtp_user": "'"$EMAIL_USER"'",
+              "smtp_pass": "'"$EMAIL_PASS"'",
+              "notify_email": "'"$NOTIFY_EMAIL"'"
+            }')
 
           BODY=$(echo "$RESPONSE" | head -n 1)
           STATUS=$(echo "$RESPONSE" | tail -n 1)
@@ -117,9 +104,11 @@ jobs:
           echo "Response: $BODY"
 
           if [ "$STATUS" -lt 200 ] || [ "$STATUS" -ge 300 ]; then
-            echo "Windmill job trigger failed"
+            echo "❌ Windmill job trigger failed"
             exit 1
           fi
+          
+          echo "✅ Pipeline triggered successfully!"
 
       # --------------------------------------------------------
       # 9. Send deployment notification

@@ -1,24 +1,7 @@
 # .github/workflows/deploy.yml
-# ══════════════════════════════════════════════════════════════
-#  GitHub Actions — CI/CD Pipeline
-#  ─────────────────────────────────
-#  Triggers on: push to main branch
-#
-#  Steps:
-#    1. Checkout code
-#    2. Install Windmill CLI
-#    3. Deploy Python scripts to Windmill
-#    4. Trigger Windmill job via REST API
-#    5. Send email notification
-#
-#  Required GitHub Secrets:
-#    WINDMILL_TOKEN      — from Windmill UI → Settings → Tokens
-#    WINDMILL_WORKSPACE  — your workspace name
-#    WINDMILL_BASE_URL   — http://YOUR_SERVER_IP:8000
-#    EMAIL_USER          — your@gmail.com
-#    EMAIL_PASS          — Gmail App Password
-#    NOTIFY_EMAIL        — destination@email.com
-# ══════════════════════════════════════════════════════════════
+# ============================================================
+# GitHub Actions — Windmill CI/CD Pipeline
+# ============================================================
 
 name: Deploy & Run Windmill Pipeline
 
@@ -27,53 +10,90 @@ on:
     branches:
       - main
 
+# Prevent parallel deployments
+concurrency:
+  group: windmill-deploy
+  cancel-in-progress: true
+
 jobs:
   deploy-and-run:
     runs-on: ubuntu-latest
 
+    env:
+      WM_TOKEN: ${{ secrets.WINDMILL_TOKEN }}
+      WM_WS: ${{ secrets.WINDMILL_WORKSPACE }}
+      WM_BASE_URL: ${{ secrets.WINDMILL_BASE_URL }}
+
     steps:
 
-      # ── 1. Get the code ──────────────────────────────────────
-      - name: Checkout
-        uses: actions/checkout@v3
+      # --------------------------------------------------------
+      # 1. Checkout repository
+      # --------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      # ── 2. Install Windmill CLI ──────────────────────────────
-      - name: Install wmill CLI
-        run: npm install -g windmill-cli
+      # --------------------------------------------------------
+      # 2. Setup Node.js
+      # --------------------------------------------------------
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
-      # ── 3. Register workspace ────────────────────────────────
-      - name: Add Windmill workspace
-        env:
-          WM_TOKEN:    ${{ secrets.WINDMILL_TOKEN }}
-          WM_WS:       ${{ secrets.WINDMILL_WORKSPACE }}
-          WM_BASE_URL: ${{ secrets.WINDMILL_BASE_URL }}
+      # --------------------------------------------------------
+      # 3. Install Windmill CLI
+      # --------------------------------------------------------
+      - name: Install Windmill CLI
+        run: npm install -g windmill-cli@1.699.0
+
+      # --------------------------------------------------------
+      # 4. Verify CLI installation
+      # --------------------------------------------------------
+      - name: Verify Windmill CLI
         run: |
-          wmill workspace add $WM_WS \
-            --token $WM_TOKEN \
-            --base-url $WM_BASE_URL
+          wmill --version
 
-      # ── 4. Deploy scripts ────────────────────────────────────
-      - name: Deploy run_pipeline.py to Windmill
-        env:
-          WM_TOKEN: ${{ secrets.WINDMILL_TOKEN }}
-          WM_WS: ${{ secrets.WINDMILL_WORKSPACE }} 
+      # --------------------------------------------------------
+      # 5. Validate required secrets
+      # --------------------------------------------------------
+      - name: Validate environment variables
         run: |
-          wmill script push --workspace $WM_WS \
-            --token $WM_TOKEN \
+          test -n "$WM_TOKEN" || (echo "Missing WINDMILL_TOKEN" && exit 1)
+          test -n "$WM_WS" || (echo "Missing WINDMILL_WORKSPACE" && exit 1)
+          test -n "$WM_BASE_URL" || (echo "Missing WINDMILL_BASE_URL" && exit 1)
+
+      # --------------------------------------------------------
+      # 6. Ensure script file exists
+      # --------------------------------------------------------
+      - name: Check script file
+        run: |
+          ls -la
+          test -f windmill/scripts/run_pipeline.py || (echo "Script file not found" && exit 1)
+
+      # --------------------------------------------------------
+      # 7. Deploy script to Windmill
+      # --------------------------------------------------------
+      - name: Deploy script to Windmill
+        run: |
+          wmill script push \
             windmill/scripts/run_pipeline.py \
-            --path u/admin/run_pipeline
+            --workspace "$WM_WS" \
+            --token "$WM_TOKEN" \
+            --base-url "$WM_BASE_URL"
 
-      # ── 5. Trigger Windmill job via REST ─────────────────────
+      # --------------------------------------------------------
+      # 8. Trigger Windmill Job
+      # --------------------------------------------------------
       - name: Trigger Windmill Job
         env:
-          WM_TOKEN:    ${{ secrets.WINDMILL_TOKEN }}
-          WM_BASE_URL: ${{ secrets.WINDMILL_BASE_URL }}
-          WM_WS:       ${{ secrets.WINDMILL_WORKSPACE }}
-          EMAIL_USER:  ${{ secrets.EMAIL_USER }}
-          EMAIL_PASS:  ${{ secrets.EMAIL_PASS }}
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
           NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
         run: |
-          curl -s -X POST \
+
+          echo "Triggering Windmill job..."
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
             "$WM_BASE_URL/api/w/$WM_WS/jobs/run/p/u/admin/run_pipeline" \
             -H "Authorization: Bearer $WM_TOKEN" \
             -H "Content-Type: application/json" \
@@ -85,29 +105,61 @@ jobs:
                 \"password\": \"windmill123\",
                 \"dbname\": \"windmill_db\"
               },
-              \"smtp_user\":    \"$EMAIL_USER\",
-              \"smtp_pass\":    \"$EMAIL_PASS\",
+              \"smtp_user\": \"$EMAIL_USER\",
+              \"smtp_pass\": \"$EMAIL_PASS\",
               \"notify_email\": \"$NOTIFY_EMAIL\"
-            }"
+            }")
 
-      # ── 6. GitHub sends its own status email ─────────────────
-      - name: Send CI/CD notification email
+          BODY=$(echo "$RESPONSE" | head -n 1)
+          STATUS=$(echo "$RESPONSE" | tail -n 1)
+
+          echo "HTTP Status: $STATUS"
+          echo "Response: $BODY"
+
+          if [ "$STATUS" -lt 200 ] || [ "$STATUS" -ge 300 ]; then
+            echo "Windmill job trigger failed"
+            exit 1
+          fi
+
+      # --------------------------------------------------------
+      # 9. Send deployment notification
+      # --------------------------------------------------------
+      - name: Send notification email
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
-          server_port:    587
-          username:       ${{ secrets.EMAIL_USER }}
-          password:       ${{ secrets.EMAIL_PASS }}
-          subject:        "🚀 Pipeline Deployed — ${{ github.sha }}"
-          body: |
-            Deployment successful!
+          server_port: 587
+          secure: false
 
-            Repo   : ${{ github.repository }}
-            Branch : ${{ github.ref }}
-            Commit : ${{ github.sha }}
-            Actor  : ${{ github.actor }}
+          username: ${{ secrets.EMAIL_USER }}
+          password: ${{ secrets.EMAIL_PASS }}
 
-            Windmill job "run_pipeline" has been deployed and triggered.
-            View results at: ${{ secrets.WINDMILL_BASE_URL }}
-          to:   ${{ secrets.NOTIFY_EMAIL }}
+          subject: "🚀 Windmill Deployment Successful"
+
+          to: ${{ secrets.NOTIFY_EMAIL }}
           from: ${{ secrets.EMAIL_USER }}
+
+          body: |
+            Deployment completed successfully.
+
+            Repository : ${{ github.repository }}
+            Branch     : ${{ github.ref_name }}
+            Commit SHA : ${{ github.sha }}
+            Triggered By: ${{ github.actor }}
+
+            Windmill Workspace:
+            ${{ secrets.WINDMILL_WORKSPACE }}
+
+            Windmill URL:
+            ${{ secrets.WINDMILL_BASE_URL }}
+
+      # --------------------------------------------------------
+      # 10. Debug logs on failure
+      # --------------------------------------------------------
+      - name: Debug on failure
+        if: failure()
+        run: |
+          echo "Workflow failed."
+          echo "Repository: ${{ github.repository }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"

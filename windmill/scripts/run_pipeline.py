@@ -80,7 +80,6 @@ def step_process(raw_rows: list) -> list:
 
 def step_store(db_host: str, db_port: int, db_user: str, db_password: str, db_name: str, rows: list) -> int:
     print(f"[{now()}] ▶ STEP 3 — Store Data")
-    print(f"[{now()}] ▶ STEP 3 — Store Data")
     conn = get_conn(db_host, db_port, db_user, db_password, db_name)
     inserted = 0
     with conn.cursor() as cur:

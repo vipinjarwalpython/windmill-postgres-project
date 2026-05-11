@@ -1,0 +1,117 @@
+version: "3.8"
+
+# ══════════════════════════════════════════════════════════════
+#  docker-compose.yml
+#  ──────────────────
+#  Services:
+#    postgres      — database (always running)
+#    windmill      — workflow UI (always running)
+#    load_data     — Step 1: read table_a
+#    process_data  — Step 2: filter rows
+#    store_data    — Step 3: write table_b
+#    notify        — Step 4: send email
+#
+#  Shared volume "pipeline_data" passes JSON files
+#  between the four pipeline steps.
+# ══════════════════════════════════════════════════════════════
+
+services:
+
+  # ── PostgreSQL ───────────────────────────────────────────────
+  postgres:
+    image: postgres:15
+    container_name: wm_postgres
+    restart: always
+    env_file: .env
+    environment:
+      POSTGRES_USER:     ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB:       ${DB_NAME}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Windmill UI ──────────────────────────────────────────────
+  windmill:
+    image: ghcr.io/windmill-labs/windmill:main
+    container_name: windmill
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgres://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      BASE_URL:     http://localhost:8000
+
+  # ── STEP 1: Load Data ────────────────────────────────────────
+  load_data:
+    build:
+      context: .
+      dockerfile: services/load_data/Dockerfile
+    container_name: wm_load_data
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - pipeline_data:/shared   # writes /shared/raw_data.json
+    profiles:
+      - pipeline                # only starts when you run: --profile pipeline
+
+  # ── STEP 2: Process / Filter Data ───────────────────────────
+  process_data:
+    build:
+      context: .
+      dockerfile: services/process_data/Dockerfile
+    container_name: wm_process_data
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - pipeline_data:/shared   # reads raw_data.json → writes processed_data.json
+    profiles:
+      - pipeline
+
+  # ── STEP 3: Store Data ───────────────────────────────────────
+  store_data:
+    build:
+      context: .
+      dockerfile: services/store_data/Dockerfile
+    container_name: wm_store_data
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - pipeline_data:/shared   # reads processed_data.json → writes summary.json
+    profiles:
+      - pipeline
+
+  # ── STEP 4: Notify ──────────────────────────────────────────
+  notify:
+    build:
+      context: .
+      dockerfile: services/notify/Dockerfile
+    container_name: wm_notify
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - pipeline_data:/shared   # reads summary.json
+    profiles:
+      - pipeline
+
+volumes:
+  pg_data:          # postgres data persists across restarts
+  pipeline_data:    # shared JSON files between pipeline steps

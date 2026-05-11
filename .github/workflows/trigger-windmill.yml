@@ -1,0 +1,63 @@
+name: Trigger Windmill Pipeline on Code Push
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'windmill/scripts/**'
+      - '.github/workflows/trigger-windmill.yml'
+
+jobs:
+  trigger-windmill:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Trigger Windmill Pipeline
+        run: |
+          echo "🔄 Triggering Windmill pipeline..."
+          
+          RESPONSE=$(curl -s -X POST \
+            ${{ secrets.WINDMILL_URL }}/api/v1/jobs/run \
+            -H "Authorization: Bearer ${{ secrets.WINDMILL_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "path": "u/admin/run_pipeline",
+              "args": {
+                "db_host": "${{ secrets.DB_HOST }}",
+                "db_port": ${{ secrets.DB_PORT }},
+                "db_user": "${{ secrets.DB_USER }}",
+                "db_password": "${{ secrets.DB_PASSWORD }}",
+                "db_name": "${{ secrets.DB_NAME }}",
+                "smtp_user": "${{ secrets.SMTP_USER }}",
+                "smtp_pass": "${{ secrets.SMTP_PASS }}",
+                "notify_email": "${{ secrets.NOTIFY_EMAIL }}"
+              }
+            }')
+          
+          echo "Response: $RESPONSE"
+          
+          # Check if job was created successfully
+          JOB_ID=$(echo "$RESPONSE" | grep -o '"id":"[^"]*' | head -1 | cut -d'"' -f4)
+          
+          if [ -z "$JOB_ID" ]; then
+            echo "❌ Failed to trigger pipeline. Check Windmill URL and token."
+            exit 1
+          fi
+          
+          echo "✅ Pipeline triggered! Job ID: $JOB_ID"
+          echo "📊 View results in Windmill UI: ${{ secrets.WINDMILL_URL }}"
+
+      - name: GitHub Notification
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "✅ Windmill pipeline triggered successfully!"
+          else
+            echo "❌ Failed to trigger Windmill pipeline"
+            exit 1
+          fi

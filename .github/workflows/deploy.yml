@@ -1,0 +1,110 @@
+# .github/workflows/deploy.yml
+# ══════════════════════════════════════════════════════════════
+#  GitHub Actions — CI/CD Pipeline
+#  ─────────────────────────────────
+#  Triggers on: push to main branch
+#
+#  Steps:
+#    1. Checkout code
+#    2. Install Windmill CLI
+#    3. Deploy Python scripts to Windmill
+#    4. Trigger Windmill job via REST API
+#    5. Send email notification
+#
+#  Required GitHub Secrets:
+#    WINDMILL_TOKEN      — from Windmill UI → Settings → Tokens
+#    WINDMILL_WORKSPACE  — your workspace name
+#    WINDMILL_BASE_URL   — http://YOUR_SERVER_IP:8000
+#    EMAIL_USER          — your@gmail.com
+#    EMAIL_PASS          — Gmail App Password
+#    NOTIFY_EMAIL        — destination@email.com
+# ══════════════════════════════════════════════════════════════
+
+name: Deploy & Run Windmill Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy-and-run:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ── 1. Get the code ──────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      # ── 2. Install Windmill CLI ──────────────────────────────
+      - name: Install wmill CLI
+        run: npm install -g windmill-cli
+
+      # ── 3. Register workspace ────────────────────────────────
+      - name: Add Windmill workspace
+        env:
+          WM_TOKEN:    ${{ secrets.WINDMILL_TOKEN }}
+          WM_WS:       ${{ secrets.WINDMILL_WORKSPACE }}
+          WM_BASE_URL: ${{ secrets.WINDMILL_BASE_URL }}
+        run: |
+          wmill workspace add myworkspace $WM_WS $WM_BASE_URL \
+            --token $WM_TOKEN
+
+      # ── 4. Deploy scripts ────────────────────────────────────
+      - name: Deploy run_pipeline.py to Windmill
+        env:
+          WM_TOKEN: ${{ secrets.WINDMILL_TOKEN }}
+        run: |
+          wmill script push windmill/scripts/run_pipeline.py \
+            --workspace myworkspace \
+            --path u/admin/run_pipeline
+
+      # ── 5. Trigger Windmill job via REST ─────────────────────
+      - name: Trigger Windmill Job
+        env:
+          WM_TOKEN:    ${{ secrets.WINDMILL_TOKEN }}
+          WM_BASE_URL: ${{ secrets.WINDMILL_BASE_URL }}
+          WM_WS:       ${{ secrets.WINDMILL_WORKSPACE }}
+          EMAIL_USER:  ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS:  ${{ secrets.EMAIL_PASS }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+        run: |
+          curl -s -X POST \
+            "$WM_BASE_URL/api/w/$WM_WS/jobs/run/p/u/admin/run_pipeline" \
+            -H "Authorization: Bearer $WM_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"db\": {
+                \"host\": \"postgres\",
+                \"port\": 5432,
+                \"user\": \"windmill\",
+                \"password\": \"windmill123\",
+                \"dbname\": \"windmill_db\"
+              },
+              \"smtp_user\":    \"$EMAIL_USER\",
+              \"smtp_pass\":    \"$EMAIL_PASS\",
+              \"notify_email\": \"$NOTIFY_EMAIL\"
+            }"
+
+      # ── 6. GitHub sends its own status email ─────────────────
+      - name: Send CI/CD notification email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port:    587
+          username:       ${{ secrets.EMAIL_USER }}
+          password:       ${{ secrets.EMAIL_PASS }}
+          subject:        "🚀 Pipeline Deployed — ${{ github.sha }}"
+          body: |
+            Deployment successful!
+
+            Repo   : ${{ github.repository }}
+            Branch : ${{ github.ref }}
+            Commit : ${{ github.sha }}
+            Actor  : ${{ github.actor }}
+
+            Windmill job "run_pipeline" has been deployed and triggered.
+            View results at: ${{ secrets.WINDMILL_BASE_URL }}
+          to:   ${{ secrets.NOTIFY_EMAIL }}
+          from: ${{ secrets.EMAIL_USER }}

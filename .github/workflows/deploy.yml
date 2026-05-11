@@ -48,8 +48,9 @@ jobs:
           WM_WS:       ${{ secrets.WINDMILL_WORKSPACE }}
           WM_BASE_URL: ${{ secrets.WINDMILL_BASE_URL }}
         run: |
-          wmill workspace add myworkspace $WM_WS $WM_BASE_URL \
-            --token $WM_TOKEN
+          wmill workspace add myworkspace \
+            --token $WM_TOKEN \
+            --base-url $WM_BASE_URL
 
       # ── 4. Deploy scripts ────────────────────────────────────
       - name: Deploy run_pipeline.py to Windmill

@@ -94,9 +94,9 @@ jobs:
         run: |
 
           echo "Triggering Windmill job..."
-          echo "Base URL: ${WM_BASE_URL:0:20}... (truncated)"
+          echo "Base URL: ${WM_BASE_URL:0:25}..."
           echo "Workspace: $WM_WS"
-          
+
           # Create JSON payload
           PAYLOAD=$(cat <<EOF
           {
@@ -109,38 +109,38 @@ jobs:
             "smtp_pass": "$EMAIL_PASS",
             "notify_email": "$NOTIFY_EMAIL"
           }
-          EOF
+      EOF
           )
-          
-          # Construct API URL
+
+          # Windmill API URL
           API_URL="${WM_BASE_URL}/api/w/${WM_WS}/jobs/run/p/u/admin/run_pipeline"
-          
-          echo "Making request to: ${API_URL:0:50}... (truncated)"
-          
-          # Make the request with verbose output
-          RESPONSE=$(curl -v -X POST "$API_URL" \
+
+          echo "Calling API:"
+          echo "$API_URL"
+
+          # Execute request
+          HTTP_RESPONSE=$(curl --silent --show-error \
+            --write-out "HTTPSTATUS:%{http_code}" \
+            -X POST "$API_URL" \
             -H "Authorization: Bearer ${WM_TOKEN}" \
             -H "Content-Type: application/json" \
-            -d "$PAYLOAD" 2>&1)
-          
-          echo "Response:"
-          echo "$RESPONSE"
-          
-          # Extract HTTP status code if available
-          STATUS=$(echo "$RESPONSE" | grep "< HTTP" | tail -1 | awk '{print $3}')
-          
-          if [ -z "$STATUS" ]; then
-            echo "❌ Failed to connect to Windmill. Check WINDMILL_BASE_URL and ngrok tunnel status."
-            exit 1
-          fi
-          
+            -d "$PAYLOAD")
+
+          # Extract body + status
+          BODY=$(echo "$HTTP_RESPONSE" | sed -e 's/HTTPSTATUS\:.*//g')
+          STATUS=$(echo "$HTTP_RESPONSE" | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+
+          echo "Response Body:"
+          echo "$BODY"
+
           echo "HTTP Status: $STATUS"
-          
+
+          # Validate response
           if [ "$STATUS" -lt 200 ] || [ "$STATUS" -ge 300 ]; then
-            echo "❌ Windmill job trigger failed with status $STATUS"
+            echo "❌ Windmill job trigger failed"
             exit 1
           fi
-          
+
           echo "✅ Pipeline triggered successfully!"
 
       # --------------------------------------------------------

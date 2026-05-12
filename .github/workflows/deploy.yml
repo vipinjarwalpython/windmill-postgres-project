@@ -1,0 +1,68 @@
+name: Trigger Windmill ETL
+
+on:
+  push:
+    branches:
+      - main
+      - orders-etl-pipeline
+
+jobs:
+  trigger-windmill-workflow:
+    name: Run orders ETL pipeline in Windmill
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Trigger Windmill workflow
+        env:
+          WM_TOKEN: ${{ secrets.WINDMILL_TOKEN }}
+          WM_WS: ${{ secrets.WINDMILL_WORKSPACE }}
+          WM_BASE_URL: ${{ secrets.WINDMILL_BASE_URL }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${WM_TOKEN}" ]; then
+            echo "Missing GitHub Secret: WINDMILL_TOKEN"
+            exit 1
+          fi
+
+          if [ -z "${WM_WS}" ]; then
+            echo "Missing GitHub Secret: WINDMILL_WORKSPACE"
+            exit 1
+          fi
+
+          if [ -z "${WM_BASE_URL}" ]; then
+            echo "Missing GitHub Secret: WINDMILL_BASE_URL"
+            exit 1
+          fi
+
+          API_URL="${WM_BASE_URL}/api/w/${WM_WS}/jobs/run/f/u/admin/orders_etl_pipeline"
+
+          echo "Calling Windmill workflow API..."
+          HTTP_RESPONSE=$(curl --silent --show-error --write-out "HTTPSTATUS:%{http_code}" \
+            --request POST \
+            --header "Authorization: Bearer ${WM_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --data '{}' \
+            "${API_URL}")
+
+          RESPONSE_BODY=$(echo "${HTTP_RESPONSE}" | sed -e 's/HTTPSTATUS\:.*//g')
+          HTTP_STATUS=$(echo "${HTTP_RESPONSE}" | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+
+          echo "Windmill API status: ${HTTP_STATUS}"
+          echo "Windmill API response:"
+          echo "${RESPONSE_BODY}"
+
+          if [ "${HTTP_STATUS}" -lt 200 ] || [ "${HTTP_STATUS}" -gt 299 ]; then
+            echo "Windmill workflow trigger failed."
+            exit 1
+          fi
+
+          if [ -z "${RESPONSE_BODY}" ]; then
+            echo "Windmill returned success status, but the response body was empty."
+            exit 1
+          fi
+
+          echo "Windmill workflow triggered successfully."

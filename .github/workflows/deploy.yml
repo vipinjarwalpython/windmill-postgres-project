@@ -10,59 +10,167 @@ jobs:
   trigger-windmill-workflow:
     name: Run orders ETL pipeline in Windmill
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Show pipeline context
+        run: |
+          echo "::group::Pipeline context"
+          echo "Repository : ${GITHUB_REPOSITORY}"
+          echo "Branch     : ${GITHUB_REF_NAME}"
+          echo "Commit SHA : ${GITHUB_SHA}"
+          echo "Triggered by: ${GITHUB_ACTOR}"
+          echo "Workflow   : ${GITHUB_WORKFLOW}"
+          echo "Run ID     : ${GITHUB_RUN_ID}"
+          echo "::endgroup::"
 
       - name: Trigger Windmill workflow
         env:
           WM_TOKEN: ${{ secrets.WINDMILL_TOKEN }}
           WM_WS: ${{ secrets.WINDMILL_WORKSPACE }}
           WM_BASE_URL: ${{ secrets.WINDMILL_BASE_URL }}
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
         run: |
           set -euo pipefail
 
-          if [ -z "${WM_TOKEN}" ]; then
-            echo "Missing GitHub Secret: WINDMILL_TOKEN"
+          WORKFLOW_PATH="u/admin/orders_etl_pipeline"
+          RESPONSE_FILE="$(mktemp)"
+
+          cleanup() {
+            rm -f "${RESPONSE_FILE}"
+          }
+          trap cleanup EXIT
+
+          if ! command -v jq >/dev/null 2>&1; then
+            echo "::error title=Missing required tool::jq is required to build the JSON request body."
             exit 1
           fi
 
-          if [ -z "${WM_WS}" ]; then
-            echo "Missing GitHub Secret: WINDMILL_WORKSPACE"
+          echo "::group::Validate required secrets"
+
+          missing_secrets=0
+
+          check_secret() {
+            local secret_name="$1"
+            local secret_value="$2"
+
+            if [ -z "${secret_value}" ]; then
+              echo "::error title=Missing GitHub secret::${secret_name} is not configured."
+              missing_secrets=1
+            else
+              echo "OK: ${secret_name} is configured."
+            fi
+          }
+
+          check_secret "WINDMILL_TOKEN" "${WM_TOKEN}"
+          check_secret "WINDMILL_WORKSPACE" "${WM_WS}"
+          check_secret "WINDMILL_BASE_URL" "${WM_BASE_URL}"
+          check_secret "EMAIL_USER" "${EMAIL_USER}"
+          check_secret "EMAIL_PASS" "${EMAIL_PASS}"
+          check_secret "NOTIFY_EMAIL" "${NOTIFY_EMAIL}"
+
+          if [ "${missing_secrets}" -ne 0 ]; then
+            echo "::endgroup::"
+            echo "::error title=Secret validation failed::Add the missing secrets in GitHub repository settings."
             exit 1
           fi
 
-          if [ -z "${WM_BASE_URL}" ]; then
-            echo "Missing GitHub Secret: WINDMILL_BASE_URL"
+          echo "::add-mask::${WM_TOKEN}"
+          echo "::add-mask::${EMAIL_USER}"
+          echo "::add-mask::${EMAIL_PASS}"
+          echo "::add-mask::${NOTIFY_EMAIL}"
+
+          echo "::endgroup::"
+
+          echo "::group::Build Windmill request"
+
+          WM_BASE_URL="${WM_BASE_URL%/}"
+          API_URL="${WM_BASE_URL}/api/w/${WM_WS}/jobs/run/f/${WORKFLOW_PATH}"
+
+          echo "Windmill workspace : ${WM_WS}"
+          echo "Windmill base URL  : ${WM_BASE_URL}"
+          echo "Workflow path      : ${WORKFLOW_PATH}"
+          echo "Trigger endpoint   : ${API_URL}"
+
+          REQUEST_BODY="$(jq -n \
+            --arg sender_email "${EMAIL_USER}" \
+            --arg sender_password "${EMAIL_PASS}" \
+            --arg receiver_email "${NOTIFY_EMAIL}" \
+            '{
+              sender_email: $sender_email,
+              sender_password: $sender_password,
+              receiver_email: $receiver_email
+            }')"
+
+          echo "Request body keys  : sender_email, sender_password, receiver_email"
+          echo "::endgroup::"
+
+          echo "::group::Call Windmill API"
+          echo "Sending POST request to Windmill..."
+
+          http_status="$(
+            curl --silent --show-error --location \
+              --connect-timeout 15 \
+              --max-time 60 \
+              --request POST \
+              --header "Authorization: Bearer ${WM_TOKEN}" \
+              --header "Content-Type: application/json" \
+              --data "${REQUEST_BODY}" \
+              --output "${RESPONSE_FILE}" \
+              --write-out "%{http_code}" \
+              "${API_URL}" \
+            || echo "curl_failed"
+          )"
+
+          response_body="$(cat "${RESPONSE_FILE}")"
+
+          echo "Windmill HTTP status: ${http_status}"
+
+          if [ -n "${response_body}" ]; then
+            echo "Windmill response body:"
+            echo "${response_body}"
+          else
+            echo "Windmill response body is empty."
+          fi
+
+          echo "::endgroup::"
+
+          echo "::group::Validate Windmill response"
+
+          if [[ "${http_status}" == *"curl_failed"* ]]; then
+            echo "::error title=Network request failed::curl could not reach the Windmill API. Check WINDMILL_BASE_URL and network availability."
             exit 1
           fi
 
-          API_URL="${WM_BASE_URL}/api/w/${WM_WS}/jobs/run/f/u/admin/orders_etl_pipeline"
-
-          echo "Calling Windmill workflow API..."
-          HTTP_RESPONSE=$(curl --silent --show-error --write-out "HTTPSTATUS:%{http_code}" \
-            --request POST \
-            --header "Authorization: Bearer ${WM_TOKEN}" \
-            --header "Content-Type: application/json" \
-            --data '{}' \
-            "${API_URL}")
-
-          RESPONSE_BODY=$(echo "${HTTP_RESPONSE}" | sed -e 's/HTTPSTATUS\:.*//g')
-          HTTP_STATUS=$(echo "${HTTP_RESPONSE}" | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
-
-          echo "Windmill API status: ${HTTP_STATUS}"
-          echo "Windmill API response:"
-          echo "${RESPONSE_BODY}"
-
-          if [ "${HTTP_STATUS}" -lt 200 ] || [ "${HTTP_STATUS}" -gt 299 ]; then
-            echo "Windmill workflow trigger failed."
+          if ! [[ "${http_status}" =~ ^[0-9]{3}$ ]]; then
+            echo "::error title=Invalid HTTP status::Received unexpected status value: ${http_status}"
             exit 1
           fi
 
-          if [ -z "${RESPONSE_BODY}" ]; then
-            echo "Windmill returned success status, but the response body was empty."
+          if [ "${http_status}" -eq 401 ] || [ "${http_status}" -eq 403 ]; then
+            echo "::error title=Windmill authentication failed::Check WINDMILL_TOKEN permissions and workspace access."
+            exit 1
+          fi
+
+          if [ "${http_status}" -eq 404 ]; then
+            echo "::error title=Windmill workflow not found::Check WINDMILL_WORKSPACE and workflow path ${WORKFLOW_PATH}."
+            exit 1
+          fi
+
+          if [ "${http_status}" -lt 200 ] || [ "${http_status}" -gt 299 ]; then
+            echo "::error title=Windmill workflow trigger failed::Windmill returned HTTP ${http_status}."
+            exit 1
+          fi
+
+          if [ -z "${response_body}" ]; then
+            echo "::error title=Empty Windmill response::Windmill returned success HTTP status but no response body."
             exit 1
           fi
 
           echo "Windmill workflow triggered successfully."
+          echo "::endgroup::"

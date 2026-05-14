@@ -20,4 +20,6 @@ class IngestRequest(BaseModel):
 class IngestResponse(BaseModel):
     upload_id: int
     inserted: dict[str, int]
+    skipped: dict[str, int]
+    total_skipped: int
     total: int

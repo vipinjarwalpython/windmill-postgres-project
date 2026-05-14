@@ -1,0 +1,410 @@
+{
+  "info": {
+    "_postman_id": "7f2a13c7-ff97-4e89-9f45-fastapi-windmill-rbac",
+    "name": "FastAPI Windmill RBAC Local",
+    "description": "Local test collection for FastAPI 4-role RBAC (admin/finance/hr/sales), Windmill-driven CSV pipeline, and department-scoped data access.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url",        "value": "http://localhost:8000" },
+    { "key": "windmill_url",    "value": "http://localhost:8080" },
+    { "key": "upload_file_path","value": "sample.csv" },
+    { "key": "admin_user",      "value": "admin" },
+    { "key": "admin_pass",      "value": "admin1234" },
+    { "key": "finance_user",    "value": "finance_user" },
+    { "key": "finance_pass",    "value": "finance1234" },
+    { "key": "hr_user",         "value": "hr_user" },
+    { "key": "hr_pass",         "value": "hr1234" },
+    { "key": "sales_user",      "value": "sales_user" },
+    { "key": "sales_pass",      "value": "sales1234" },
+    { "key": "ingest_token",    "value": "local-ingest-secret-change-me" },
+    { "key": "admin_token",     "value": "" },
+    { "key": "finance_token",   "value": "" },
+    { "key": "hr_token",        "value": "" },
+    { "key": "sales_token",     "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Root",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/", "host": ["{{base_url}}"], "path": [""] }
+          }
+        },
+        {
+          "name": "FastAPI Live",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/health/live", "host": ["{{base_url}}"], "path": ["api","v1","health","live"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('status is 200', function () { pm.response.to.have.status(200); });"
+          ]}}]
+        },
+        {
+          "name": "FastAPI Ready",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/health/ready", "host": ["{{base_url}}"], "path": ["api","v1","health","ready"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('database is ready', function () {",
+            "  pm.response.to.have.status(200);",
+            "  pm.expect(pm.response.json().database).to.eql('ok');",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "Windmill UI Reachable",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{windmill_url}}", "host": ["{{windmill_url}}"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Windmill responds', function () { pm.response.to.have.status(200); });"
+          ]}}]
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register Custom User (finance role)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"new_finance_user\",\n  \"password\": \"StrongPass123\",\n  \"role\": \"finance\"\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/auth/register", "host": ["{{base_url}}"], "path": ["api","v1","auth","register"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('registered or already exists', function () { pm.expect([201, 409]).to.include(pm.response.code); });"
+          ]}}]
+        },
+        {
+          "name": "Login - admin",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"{{admin_user}}\",\n  \"password\": \"{{admin_pass}}\"\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api","v1","auth","login"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('login succeeds', function () { pm.response.to.have.status(200); });",
+            "pm.collectionVariables.set('admin_token', pm.response.json().access_token);"
+          ]}}]
+        },
+        {
+          "name": "Login - finance_user",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"{{finance_user}}\",\n  \"password\": \"{{finance_pass}}\"\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api","v1","auth","login"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('login succeeds', function () { pm.response.to.have.status(200); });",
+            "pm.collectionVariables.set('finance_token', pm.response.json().access_token);"
+          ]}}]
+        },
+        {
+          "name": "Login - hr_user",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"{{hr_user}}\",\n  \"password\": \"{{hr_pass}}\"\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api","v1","auth","login"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('login succeeds', function () { pm.response.to.have.status(200); });",
+            "pm.collectionVariables.set('hr_token', pm.response.json().access_token);"
+          ]}}]
+        },
+        {
+          "name": "Login - sales_user",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"{{sales_user}}\",\n  \"password\": \"{{sales_pass}}\"\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api","v1","auth","login"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('login succeeds', function () { pm.response.to.have.status(200); });",
+            "pm.collectionVariables.set('sales_token', pm.response.json().access_token);"
+          ]}}]
+        },
+        {
+          "name": "Login - bad password (expect 401)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"{{admin_user}}\",\n  \"password\": \"wrongpass\"\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/auth/login", "host": ["{{base_url}}"], "path": ["api","v1","auth","login"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('unauthorized', function () { pm.response.to.have.status(401); });"
+          ]}}]
+        }
+      ]
+    },
+    {
+      "name": "Uploads",
+      "item": [
+        {
+          "name": "Upload CSV as admin (triggers Windmill)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+            "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "{{upload_file_path}}" }] },
+            "url": { "raw": "{{base_url}}/api/v1/uploads/loan", "host": ["{{base_url}}"], "path": ["api","v1","uploads","loan"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('upload accepted', function () { pm.expect([201, 502]).to.include(pm.response.code); });",
+            "if (pm.response.code === 201) {",
+            "  const body = pm.response.json();",
+            "  pm.expect(body.status).to.eql('workflow_triggered');",
+            "  pm.expect(body.upload_id).to.be.a('number');",
+            "  pm.expect(body.windmill_job_id).to.be.a('string');",
+            "}"
+          ]}}]
+        },
+        {
+          "name": "Upload CSV as finance (expect 403)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{finance_token}}" }],
+            "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "{{upload_file_path}}" }] },
+            "url": { "raw": "{{base_url}}/api/v1/uploads/loan", "host": ["{{base_url}}"], "path": ["api","v1","uploads","loan"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('forbidden for non-admin', function () { pm.response.to.have.status(403); });"
+          ]}}]
+        },
+        {
+          "name": "Upload without token (expect 401)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "{{upload_file_path}}" }] },
+            "url": { "raw": "{{base_url}}/api/v1/uploads/loan", "host": ["{{base_url}}"], "path": ["api","v1","uploads","loan"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('unauthorized without token', function () { pm.response.to.have.status(401); });"
+          ]}}]
+        }
+      ]
+    },
+    {
+      "name": "Department Data",
+      "item": [
+        {
+          "name": "GET /data/me as finance (only finance rows)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{finance_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/data/me", "host": ["{{base_url}}"], "path": ["api","v1","data","me"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 with finance department', function () {",
+            "  pm.response.to.have.status(200);",
+            "  pm.expect(pm.response.json().department).to.eql('finance');",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "GET /data/me as hr",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{hr_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/data/me", "host": ["{{base_url}}"], "path": ["api","v1","data","me"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 with hr department', function () {",
+            "  pm.response.to.have.status(200);",
+            "  pm.expect(pm.response.json().department).to.eql('hr');",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "GET /data/me as sales",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{sales_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/data/me", "host": ["{{base_url}}"], "path": ["api","v1","data","me"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 with sales department', function () {",
+            "  pm.response.to.have.status(200);",
+            "  pm.expect(pm.response.json().department).to.eql('sales');",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "GET /data/me as admin (combined)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/data/me", "host": ["{{base_url}}"], "path": ["api","v1","data","me"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 with all department', function () {",
+            "  pm.response.to.have.status(200);",
+            "  pm.expect(pm.response.json().department).to.eql('all');",
+            "});"
+          ]}}]
+        },
+        {
+          "name": "GET /data/finance as finance (allowed)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{finance_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/data/finance", "host": ["{{base_url}}"], "path": ["api","v1","data","finance"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', function () { pm.response.to.have.status(200); });"
+          ]}}]
+        },
+        {
+          "name": "GET /data/finance as admin (allowed)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/data/finance", "host": ["{{base_url}}"], "path": ["api","v1","data","finance"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200', function () { pm.response.to.have.status(200); });"
+          ]}}]
+        },
+        {
+          "name": "GET /data/hr as finance (expect 403)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{finance_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/data/hr", "host": ["{{base_url}}"], "path": ["api","v1","data","hr"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('forbidden across departments', function () { pm.response.to.have.status(403); });"
+          ]}}]
+        },
+        {
+          "name": "GET /data/sales as hr (expect 403)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{hr_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/data/sales", "host": ["{{base_url}}"], "path": ["api","v1","data","sales"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('forbidden across departments', function () { pm.response.to.have.status(403); });"
+          ]}}]
+        },
+        {
+          "name": "GET /data/unknown (expect 404)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/data/unknown", "host": ["{{base_url}}"], "path": ["api","v1","data","unknown"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('unknown department 404', function () { pm.response.to.have.status(404); });"
+          ]}}]
+        },
+        {
+          "name": "GET /data/me without token (expect 401)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/data/me", "host": ["{{base_url}}"], "path": ["api","v1","data","me"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('unauthorized', function () { pm.response.to.have.status(401); });"
+          ]}}]
+        }
+      ]
+    },
+    {
+      "name": "Internal Ingest (called by Windmill)",
+      "item": [
+        {
+          "name": "POST /internal/ingest with valid token",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Ingest-Token", "value": "{{ingest_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"upload_id\": 1,\n  \"rows\": [\n    {\n      \"department\": \"finance\",\n      \"source_row_id\": 9999,\n      \"employee_name\": \"Postman Test\",\n      \"amount\": 12345.67,\n      \"record_date\": \"2026-05-13\"\n    }\n  ]\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/internal/ingest", "host": ["{{base_url}}"], "path": ["api","v1","internal","ingest"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('ingest succeeds', function () { pm.response.to.have.status(200); });",
+            "pm.test('inserted finance:1', function () { pm.expect(pm.response.json().inserted.finance).to.eql(1); });"
+          ]}}]
+        },
+        {
+          "name": "POST /internal/ingest without token (expect 401)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"upload_id\": 1,\n  \"rows\": []\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/internal/ingest", "host": ["{{base_url}}"], "path": ["api","v1","internal","ingest"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('unauthorized without token', function () { pm.response.to.have.status(401); });"
+          ]}}]
+        },
+        {
+          "name": "POST /internal/ingest with bad token (expect 401)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Ingest-Token", "value": "wrong-token" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"upload_id\": 1,\n  \"rows\": []\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/internal/ingest", "host": ["{{base_url}}"], "path": ["api","v1","internal","ingest"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('unauthorized with bad token', function () { pm.response.to.have.status(401); });"
+          ]}}]
+        }
+      ]
+    },
+    {
+      "name": "Docs",
+      "item": [
+        {
+          "name": "Swagger UI",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/docs", "host": ["{{base_url}}"], "path": ["docs"] }
+          }
+        },
+        {
+          "name": "OpenAPI JSON",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/openapi.json", "host": ["{{base_url}}"], "path": ["openapi.json"] }
+          }
+        }
+      ]
+    }
+  ]
+}

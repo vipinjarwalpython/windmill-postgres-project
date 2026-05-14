@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(docker compose up -d --no-deps --force-recreate api windmill_worker 2>&1)",
+      "PowerShell(docker exec windmill_worker getent hosts pypi.org 2>&1)",
+      "PowerShell(docker exec windmill_worker sh -c \"curl -s -o /dev/null -w '%{http_code}\\\\n' --max-time 8 https://pypi.org/simple/\" 2>&1)",
+      "PowerShell(docker exec windmill_worker sh -c \"getent hosts db\" 2>&1)",
+      "PowerShell(docker compose up -d --no-deps --force-recreate api 2>&1)",
+      "PowerShell(docker exec fastapi_windmill_api cat /app/.env)",
+      "PowerShell(docker compose up -d --force-recreate api)",
+      "PowerShell(docker exec fastapi_windmill_postgres psql -U postgres -d loan_db -c \"SELECT id, original_filename, status, windmill_job_id, created_at FROM file_uploads ORDER BY id DESC LIMIT 5;\")",
+      "PowerShell(docker exec fastapi_windmill_postgres psql -U postgres -d loan_db -c \"SELECT id, department, email, updated_at FROM department_settings ORDER BY department;\")",
+      "PowerShell(docker exec fastapi_windmill_postgres psql -U postgres -d loan_db -c \"UPDATE department_settings SET email='vipinjarwal.002@gmail.com' WHERE department='finance'; UPDATE department_settings SET email='vipin2009.jarwal@gmail.com' WHERE department='hr'; UPDATE department_settings SET email='hafov39959@codoteam.com' WHERE department='sales'; SELECT department, email, updated_at FROM department_settings ORDER BY department;\")",
+      "Bash(git remote *)",
+      "Bash(git add *)"
+    ]
+  }
+}

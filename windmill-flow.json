@@ -1,0 +1,35 @@
+{
+    "summary":  "Local loan upload pipeline",
+    "path":  "u/admin/loan_pipeline",
+    "description":  "Triggered by FastAPI after a loan file upload.",
+    "value":  {
+                  "modules":  [
+                                  {
+                                      "id":  "process_upload",
+                                      "value":  {
+                                                    "content":  "def main(upload_id: int, file_path: str, original_filename: str, user: str):`n    return {\"upload_id\": upload_id, \"file_path\": file_path, \"original_filename\": original_filename, \"user\": user, \"status\": \"processed_by_windmill_local_test\"}",
+                                                    "input_transforms":  {
+                                                                             "user":  {
+                                                                                          "type":  "javascript",
+                                                                                          "expr":  "flow_input.user"
+                                                                                      },
+                                                                             "file_path":  {
+                                                                                               "type":  "javascript",
+                                                                                               "expr":  "flow_input.file_path"
+                                                                                           },
+                                                                             "original_filename":  {
+                                                                                                       "type":  "javascript",
+                                                                                                       "expr":  "flow_input.original_filename"
+                                                                                                   },
+                                                                             "upload_id":  {
+                                                                                               "type":  "javascript",
+                                                                                               "expr":  "flow_input.upload_id"
+                                                                                           }
+                                                                         },
+                                                    "language":  "python3",
+                                                    "type":  "rawscript"
+                                                }
+                                  }
+                              ]
+              }
+}

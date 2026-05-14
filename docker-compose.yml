@@ -1,0 +1,103 @@
+services:
+  api:
+    build: .
+    container_name: fastapi_windmill_api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - upload_data:/data/uploads
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/loan_db
+      STORAGE_DIR: /data/uploads
+      WINDMILL_BASE_URL: http://windmill_server:8000
+    depends_on:
+      db:
+        condition: service_healthy
+      windmill_server:
+        condition: service_started
+    networks:
+      - backend
+
+  db:
+    image: postgres:15-alpine
+    container_name: fastapi_windmill_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: loan_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d loan_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend
+
+  windmill_server:
+    image: ghcr.io/windmill-labs/windmill:main
+    container_name: windmill_server
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/windmill?sslmode=disable
+      MODE: server
+      BASE_URL: ${WINDMILL_PUBLIC_URL:-http://localhost:8080}
+      RUST_LOG: info
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8000"
+    networks:
+      - backend
+
+  windmill_worker:
+    image: ghcr.io/windmill-labs/windmill:main
+    container_name: windmill_worker
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/windmill?sslmode=disable
+      MODE: worker
+      WORKER_GROUP: default
+      RUST_LOG: info
+    volumes:
+      - upload_data:/data/uploads:ro
+    depends_on:
+      windmill_server:
+        condition: service_started
+    networks:
+      - backend
+
+  ngrok_windmill:
+    image: ngrok/ngrok:latest
+    container_name: ngrok_windmill
+    restart: unless-stopped
+    profiles:
+      - tunnel
+    command: ["http", "http://windmill_server:8000"]
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    depends_on:
+      windmill_server:
+        condition: service_started
+    ports:
+      - "4040:4040"
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  upload_data:

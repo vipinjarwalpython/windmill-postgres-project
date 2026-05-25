@@ -1,0 +1,169 @@
+{# Live, auto-refreshed portion of /pipeline.
+   Rendered standalone by /pipeline/refresh for AJAX polling. #}
+{% from "_pipeline_macros.html" import phase_icon, phase_state_icon, phase_label %}
+
+<div class="kpi-grid">
+  <div class="kpi k-violet">
+    <div class="kpi-head">
+      <div class="kpi-label">Runs shown</div>
+      <div class="kpi-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/></svg>
+      </div>
+    </div>
+    <div class="kpi-value">{{ summary.total }}</div>
+    <div class="kpi-foot"><span class="delta flat">last {{ summary.total }}</span> uploads</div>
+  </div>
+  <div class="kpi k-emerald">
+    <div class="kpi-head">
+      <div class="kpi-label">Passed</div>
+      <div class="kpi-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+    </div>
+    <div class="kpi-value">{{ summary.passed }}</div>
+    <div class="kpi-foot"><span class="delta up">all phases</span> green</div>
+  </div>
+  <div class="kpi k-cyan">
+    <div class="kpi-head">
+      <div class="kpi-label">Running</div>
+      <div class="kpi-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+      </div>
+    </div>
+    <div class="kpi-value">{{ summary.running }}</div>
+    <div class="kpi-foot"><span class="delta flat">in flight</span> right now</div>
+  </div>
+  <div class="kpi k-rose">
+    <div class="kpi-head">
+      <div class="kpi-label">Failed</div>
+      <div class="kpi-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+      </div>
+    </div>
+    <div class="kpi-value">{{ summary.failed }}</div>
+    <div class="kpi-foot"><span class="delta {{ 'down' if summary.failed else 'flat' }}">attention</span> required</div>
+  </div>
+</div>
+
+{% if latest %}
+<section class="card card-glow run-feature">
+  <div class="card-head">
+    <div>
+      <span class="eyebrow">Latest run</span>
+      <h2 class="card-title">
+        Upload #{{ latest.upload.id }} &middot;
+        <span class="mono" style="color:var(--text-soft);">{{ latest.upload.original_filename }}</span>
+      </h2>
+      <p class="card-subtitle">
+        Triggered by user #{{ latest.upload.owner_id }} &middot;
+        {{ latest.upload.created_at.strftime('%Y-%m-%d %H:%M:%S') }} &middot;
+        {{ format_size(latest.upload.size_bytes) }}
+        {% if latest.upload.windmill_job_id %} &middot; Job <code class="mono">{{ latest.upload.windmill_job_id }}</code>{% endif %}
+      </p>
+    </div>
+    <span class="run-status run-status-{{ latest.overall }}">
+      {% if latest.overall == 'passed' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      {% elif latest.overall == 'failed' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      {% elif latest.overall == 'running' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+      {% else %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>
+      {% endif %}
+      <span>
+        {% if latest.overall == 'passed' %}Completed
+        {% elif latest.overall == 'failed' %}Failed
+        {% elif latest.overall == 'running' %}Running
+        {% else %}Pending{% endif %}
+      </span>
+    </span>
+  </div>
+
+  <div class="phase-track">
+    {% for ph in latest.phases %}
+    <div class="phase-node phase-{{ ph.status }}">
+      <div class="phase-ring">
+        <div class="phase-circle">{{ phase_icon(ph.icon) }}</div>
+        <div class="phase-badge">{{ phase_state_icon(ph.status) }}</div>
+      </div>
+      <div class="phase-text">
+        <div class="phase-step">Step {{ loop.index }}</div>
+        <div class="phase-name">{{ ph.name|safe }}</div>
+        <div class="phase-meta">{{ phase_label(ph.status) }}</div>
+        <div class="phase-detail">{{ ph.detail|safe }}</div>
+      </div>
+    </div>
+    {% if not loop.last %}
+    <div class="phase-connector phase-{{ latest.phases[loop.index0 + 1].status if loop.index0 + 1 < latest.phases|length else 'pending' }} from-{{ ph.status }}"></div>
+    {% endif %}
+    {% endfor %}
+  </div>
+
+  {% if latest.ingested_rows %}
+  <div class="run-breakdown">
+    <span class="breakdown-pill"><span class="swatch" style="background:#10b981"></span> Finance <strong>{{ latest.breakdown.finance }}</strong></span>
+    <span class="breakdown-pill"><span class="swatch" style="background:#f59e0b"></span> HR <strong>{{ latest.breakdown.hr }}</strong></span>
+    <span class="breakdown-pill"><span class="swatch" style="background:#ec4899"></span> Sales <strong>{{ latest.breakdown.sales }}</strong></span>
+    <span class="breakdown-pill total"><strong>{{ latest.ingested_rows }}</strong> rows total</span>
+  </div>
+  {% endif %}
+</section>
+{% else %}
+<section class="card">
+  <div class="empty-state">
+    <div class="empty-icon">&#9636;</div>
+    <div>No pipeline runs yet.</div>
+    <div class="small-text mt-4">
+      Upload a loan file from <a href="/uploads" class="link-strong">Uploads</a> to kick off the first run.
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{% if history %}
+<section class="card">
+  <div class="card-head">
+    <div>
+      <h2 class="card-title">Run history</h2>
+      <p class="card-subtitle">Previous {{ history|length }} runs with per-phase status.</p>
+    </div>
+    <a href="/uploads" class="btn btn-secondary btn-sm">All uploads &rsaquo;</a>
+  </div>
+
+  <div class="run-list">
+    {% for run in history %}
+    <article class="run-row run-row-{{ run.overall }}">
+      <div class="run-row-head">
+        <div class="run-row-id">
+          <span class="run-status run-status-{{ run.overall }} compact">
+            {% if run.overall == 'passed' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            {% elif run.overall == 'failed' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            {% elif run.overall == 'running' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+            {% else %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>
+            {% endif %}
+          </span>
+          <div>
+            <div class="run-row-title">
+              <span class="mono" style="color:var(--text-soft);">#{{ run.upload.id }}</span>
+              <strong>{{ run.upload.original_filename }}</strong>
+            </div>
+            <div class="run-row-meta small-text">
+              {{ run.upload.created_at.strftime('%Y-%m-%d %H:%M') }}
+              {% if run.ingested_rows %} &middot; {{ run.ingested_rows }} rows{% endif %}
+              {% if run.upload.windmill_job_id %} &middot; <code class="mono">{{ run.upload.windmill_job_id }}</code>{% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="phase-strip">
+        {% for ph in run.phases %}
+        <div class="phase-chip phase-{{ ph.status }}" title="{{ ph.name }}: {{ phase_label(ph.status) }} · {{ ph.detail }}">
+          <span class="chip-icon">{{ phase_state_icon(ph.status) }}</span>
+          <span class="chip-name">{{ ph.name|safe }}</span>
+        </div>
+        {% if not loop.last %}<span class="chip-connector phase-{{ run.phases[loop.index0 + 1].status if loop.index0 + 1 < run.phases|length else 'pending' }}"></span>{% endif %}
+        {% endfor %}
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}

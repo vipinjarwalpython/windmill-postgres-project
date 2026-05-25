@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     hr_email: str = "squirreltechnical@gmail.com"
     sales_email: str = "squirreltechnical@gmail.com"
 
+    # Send a notification email from FastAPI right after triggering Windmill,
+    # so we have a definitive audit log for the "Split & notify" phase and
+    # admins see SMTP failures in the console instead of only in worker logs.
+    email_notify_on_upload: bool = True
+
     @property
     def department_email_defaults(self) -> dict[str, str]:
         return {

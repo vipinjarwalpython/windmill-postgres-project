@@ -1,0 +1,174 @@
+{% extends "_layout.html" %}
+{% set active = 'smtp' %}
+
+{% block page_title %}SMTP diagnostics{% endblock %}
+{% block crumbs %}Console &rsaquo; SMTP{% endblock %}
+
+{% block content %}
+<div class="page-header reveal-on-load">
+  <div>
+    <h1 class="section-title">
+      Email / SMTP
+      <span class="badge {% if smtp_is_configured %}badge-finance{% else %}badge-default{% endif %}" style="font-size:11px;">
+        {% if smtp_is_configured %}Configured{% else %}Not configured{% endif %}
+      </span>
+    </h1>
+    <p class="section-subtitle">
+      Verify the SMTP credentials used by Windmill to notify departments after every ingest.
+      Test the connection and send a real email from this page — errors are shown in full.
+    </p>
+  </div>
+  <span class="badge {{ role_badge_class }}">{{ role_label }}</span>
+</div>
+
+{% if result %}
+{% if result.ok %}
+<div class="alert alert-success reveal-on-load delay-1">
+  <strong>{{ result.title }}</strong>
+  <span>{{ result.detail }}</span>
+</div>
+{% else %}
+<div class="alert alert-error reveal-on-load delay-1">
+  <strong>{{ result.title }}</strong>
+  <span>{{ result.detail }}</span>
+  {% if result.hint %}<span class="alert-detail"><em>Hint:</em> {{ result.hint }}</span>{% endif %}
+  <span class="alert-detail">
+    Stage: <code>{{ result.stage }}</code>
+    {% if result.kind == 'send' and result.recipient %} &middot; Recipient: <code>{{ result.recipient }}</code>{% endif %}
+  </span>
+</div>
+{% endif %}
+{% endif %}
+
+<div class="dash-row cols-2">
+  {# ----- Configuration panel ----- #}
+  <section class="card reveal-on-load delay-1">
+    <div class="card-head">
+      <div>
+        <h2 class="card-title">Current configuration</h2>
+        <p class="card-subtitle">Values come from the <code>SMTP_*</code> env vars at container start.</p>
+      </div>
+    </div>
+
+    <div class="smtp-config">
+      {% for key, item in smtp_config_status.items() %}
+      <div class="smtp-row {% if item.set %}is-set{% else %}is-missing{% endif %}">
+        <span class="smtp-key">
+          <span class="smtp-dot"></span>
+          <span class="smtp-name">SMTP_{{ key|upper }}</span>
+        </span>
+        <span class="smtp-val mono">
+          {% if item.set %}{{ item.value }}{% else %}<em class="text-muted">not set</em>{% endif %}
+        </span>
+        <span class="smtp-status">
+          {% if item.set %}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          {% else %}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          {% endif %}
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+
+    <p class="card-subtitle mt-4" style="margin-bottom:0;">
+      To change these, edit <code class="mono">.env</code> then run
+      <code class="mono">docker compose up -d --force-recreate api</code> — a plain restart
+      will <strong>not</strong> reload the env file.
+    </p>
+  </section>
+
+  {# ----- Actions panel ----- #}
+  <section class="card card-glow reveal-on-load delay-2">
+    <div class="card-head">
+      <div>
+        <h2 class="card-title">Run a test</h2>
+        <p class="card-subtitle">Validate credentials before relying on Windmill's email step.</p>
+      </div>
+    </div>
+
+    <form method="post" action="/smtp/test-connection" class="smtp-action">
+      <div class="smtp-action-body">
+        <div class="smtp-action-title">1 &middot; Test connection</div>
+        <p class="smtp-action-desc">
+          Opens a connection, negotiates TLS, and authenticates as <code>SMTP_USERNAME</code>.
+          <strong>No email is sent.</strong>
+        </p>
+      </div>
+      <button type="submit" class="btn btn-secondary" {% if not smtp_is_configured %}disabled{% endif %}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Test connection
+      </button>
+    </form>
+
+    <form method="post" action="/smtp/test-send" class="smtp-action">
+      <div class="smtp-action-body">
+        <div class="smtp-action-title">2 &middot; Send test email</div>
+        <p class="smtp-action-desc">
+          Sends a real email to the address below. Use this to confirm the full path works.
+        </p>
+        <input
+          type="email"
+          name="recipient"
+          class="form-control"
+          value="{{ default_test_recipient }}"
+          placeholder="you@example.com"
+          required
+          {% if not smtp_is_configured %}disabled{% endif %}
+        />
+      </div>
+      <button type="submit" class="btn btn-primary" {% if not smtp_is_configured %}disabled{% endif %}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        Send test email
+      </button>
+    </form>
+
+    {% if not smtp_is_configured %}
+    <div class="alert alert-warning" style="margin-top:8px;">
+      <strong>SMTP is not fully configured.</strong>
+      <span>Fill the missing fields in <code>.env</code> and recreate the API container — the buttons unlock once everything is set.</span>
+    </div>
+    {% endif %}
+  </section>
+</div>
+
+{# ----- Troubleshooting ----- #}
+<section class="card mt-6 reveal-on-load delay-3">
+  <div class="card-head">
+    <div>
+      <h2 class="card-title">Troubleshooting</h2>
+      <p class="card-subtitle">Common SMTP failure modes and how to fix them.</p>
+    </div>
+  </div>
+  <div class="legend-grid">
+    <div class="legend-item phase-failed">
+      <span class="legend-dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
+      <div>
+        <strong>Authentication failed</strong>
+        <div class="small-text">Gmail &amp; Outlook reject your account password. Generate an <strong>App Password</strong> at <code class="mono">myaccount.google.com/apppasswords</code> and use that as <code>SMTP_PASSWORD</code>. Two-factor auth must be on first.</div>
+      </div>
+    </div>
+    <div class="legend-item phase-failed">
+      <span class="legend-dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></span>
+      <div>
+        <strong>Could not connect / timeout</strong>
+        <div class="small-text">Check <code>SMTP_HOST</code> and <code>SMTP_PORT</code> are correct (Gmail: <code>smtp.gmail.com:587</code>). Make sure the container has outbound internet.</div>
+      </div>
+    </div>
+    <div class="legend-item phase-blocked">
+      <span class="legend-dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>
+      <div>
+        <strong>TLS error</strong>
+        <div class="small-text">Use port <code>587</code> with STARTTLS, or port <code>465</code> for implicit SSL. Don't mix.</div>
+      </div>
+    </div>
+    <div class="legend-item phase-running">
+      <span class="legend-dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></span>
+      <div>
+        <strong>Changed .env but nothing happened?</strong>
+        <div class="small-text">Run <code class="mono">docker compose up -d --force-recreate api</code>. A plain restart reuses the old env snapshot.</div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

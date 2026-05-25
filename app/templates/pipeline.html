@@ -1,0 +1,131 @@
+{% extends "_layout.html" %}
+{% set active = 'pipeline' %}
+
+{% block page_title %}Pipeline phases{% endblock %}
+{% block crumbs %}Console &rsaquo; Pipeline{% endblock %}
+
+{% block content %}
+<div class="workflow-toolbar reveal-on-load delay-1">
+  <div class="left">
+    <h1 class="section-title">
+      Pipeline phases
+      <span class="live-pill" title="Live"><span class="live-dot"></span>Live</span>
+    </h1>
+    <p class="section-subtitle">
+      End-to-end view of every loan-pipeline run &mdash; auto-refreshing every few seconds.
+    </p>
+  </div>
+  <div class="actions">
+    <span class="live-meta" id="live-meta" aria-live="polite" title="Auto-refresh status">
+      <span class="live-meta-dot"></span>
+      <span class="live-meta-text">Live · just now</span>
+    </span>
+    <button type="button" class="btn btn-secondary btn-sm" id="live-toggle" title="Pause live updates">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+      Pause
+    </button>
+    <button type="button" class="btn btn-secondary btn-sm" id="live-refresh-now" title="Refresh now">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      Refresh
+    </button>
+    <a class="btn btn-secondary btn-sm" href="/workflows">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      Workflows
+    </a>
+    <a class="btn btn-primary btn-sm" href="/workflows/live">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      Live dashboard
+    </a>
+  </div>
+</div>
+
+<div id="pipeline-live" data-refresh-url="/pipeline/refresh" data-refresh-interval="4000">
+  {% include "_pipeline_live.html" %}
+</div>
+
+{# Ingest configuration — quick diagnostics for "ran but no rows" #}
+<section class="card reveal-on-load delay-4">
+  <div class="card-head">
+    <div>
+      <h2 class="card-title">Ingest endpoint configuration</h2>
+      <p class="card-subtitle">
+        The Windmill flow's last step must POST to this URL with the matching token.
+        If a job &ldquo;succeeded&rdquo; in Windmill but the Ingest phase here is red,
+        the flow likely cannot reach this URL from inside the worker container.
+      </p>
+    </div>
+  </div>
+  <div class="smtp-config">
+    <div class="smtp-row is-set">
+      <span class="smtp-key"><span class="smtp-dot"></span><span class="smtp-name">INGEST_CALLBACK_URL</span></span>
+      <span class="smtp-val mono">{{ ingest_callback_url }}</span>
+      <span class="smtp-status">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </span>
+    </div>
+    <div class="smtp-row is-set">
+      <span class="smtp-key"><span class="smtp-dot"></span><span class="smtp-name">INGEST_TOKEN</span></span>
+      <span class="smtp-val mono">{{ ingest_token_mask }}</span>
+      <span class="smtp-status">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </span>
+    </div>
+    <div class="smtp-row {% if windmill_mock %}is-missing{% else %}is-set{% endif %}">
+      <span class="smtp-key"><span class="smtp-dot"></span><span class="smtp-name">WINDMILL_MOCK</span></span>
+      <span class="smtp-val mono">{{ windmill_mock }}</span>
+      <span class="smtp-status">
+        {% if windmill_mock %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        {% else %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        {% endif %}
+      </span>
+    </div>
+  </div>
+  {% if windmill_mock %}
+  <div class="alert alert-warning" style="margin-top:12px;">
+    <strong>Mock mode is on.</strong>
+    <span>Set <code class="mono">WINDMILL_MOCK=false</code> and recreate the api container to use the real Windmill.</span>
+  </div>
+  {% else %}
+  <p class="card-subtitle mt-4" style="margin-bottom:0;">
+    <strong>Worker URL gotcha:</strong> when the Windmill worker runs in Docker,
+    <code class="mono">localhost</code> is the worker container itself — not the FastAPI container.
+    The callback URL must use the service name (<code class="mono">http://api:8000/api/v1/internal/ingest</code>)
+    or an externally reachable hostname. Check Windmill's job logs to see what the HTTP step actually returned.
+  </p>
+  {% endif %}
+</section>
+
+{# Legend #}
+<section class="card reveal-on-load delay-4">
+  <div class="card-head">
+    <div>
+      <h2 class="card-title">Legend</h2>
+      <p class="card-subtitle">Color &amp; icon meaning for each phase state.</p>
+    </div>
+  </div>
+  <div class="legend-grid">
+    <div class="legend-item phase-passed">
+      <span class="legend-dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+      <div><strong>Passed</strong><div class="small-text">Phase completed successfully.</div></div>
+    </div>
+    <div class="legend-item phase-running">
+      <span class="legend-dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg></span>
+      <div><strong>Running</strong><div class="small-text">Phase is in flight.</div></div>
+    </div>
+    <div class="legend-item phase-failed">
+      <span class="legend-dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
+      <div><strong>Failed</strong><div class="small-text">An error occurred &mdash; downstream phases are skipped.</div></div>
+    </div>
+    <div class="legend-item phase-blocked">
+      <span class="legend-dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></span>
+      <div><strong>Skipped</strong><div class="small-text">Not run because an earlier phase failed.</div></div>
+    </div>
+    <div class="legend-item phase-pending">
+      <span class="legend-dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+      <div><strong>Pending</strong><div class="small-text">Phase has not started yet.</div></div>
+    </div>
+  </div>
+</section>
+{% endblock %}

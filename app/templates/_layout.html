@@ -26,6 +26,14 @@
       <span>Workflows</span>
       <span class="badge-mini" style="background: rgba(16,185,129,0.18); color:#6ee7b7;">Live</span>
     </a>
+    <a class="sidebar-link {% if active == 'pipeline' %}active{% endif %}" href="/pipeline">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/><line x1="7" y1="12" x2="10" y2="12"/><line x1="14" y1="12" x2="17" y2="12"/></svg>
+      <span>Pipeline phases</span>
+    </a>
+    <a class="sidebar-link {% if active == 'smtp' %}active{% endif %}" href="/smtp">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+      <span>SMTP</span>
+    </a>
     {% endif %}
     <a class="sidebar-link {% if active == 'activity' %}active{% endif %}" href="/activity">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>

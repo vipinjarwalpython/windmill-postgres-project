@@ -69,10 +69,10 @@
     {% if success %}
     <div class="alert alert-success">
       <strong>Uploaded.</strong>
-      <span><code>{{ success.filename }}</code> stored as upload #{{ success.upload_id }}.</span>
-      {% if success.job_id %}
-      <span class="alert-detail">Windmill job: <code>{{ success.job_id }}</code> &middot; status: <strong>{{ success.status }}</strong></span>
-      {% endif %}
+      <span><code>{{ success.filename }}</code> stored as upload #{{ success.upload_id }}. Processing is running in the background.</span>
+      <span class="alert-detail">
+        Watch the <a href="/pipeline?refresh=5" class="link-strong">Pipeline phases</a> page (auto-refreshes) to see Trigger → Split &amp; notify → Ingest light up live.
+      </span>
     </div>
     {% endif %}
 

@@ -10,6 +10,7 @@ from app.core.config import Settings, get_settings
 from app.db.session import get_db_session
 from app.models.department_data import DEPARTMENT_MODELS
 from app.schemas.ingest import IngestRequest, IngestResponse, IngestRow
+from app.services.audit_service import AuditService
 
 logger = logging.getLogger(__name__)
 
@@ -102,9 +103,28 @@ async def ingest(
             )
             inserted[department] += 1
 
-    await session.commit()
-
+    total_inserted = sum(inserted.values())
     total_skipped = sum(skipped.values())
+
+    # Audit-log the callback so the Pipeline page can show "ingest happened"
+    # independent of whether any rows were actually inserted (all duplicates
+    # would otherwise look like nothing happened).
+    audit = AuditService(session)
+    await audit.record(
+        action="ingest.received",
+        resource_type="file_upload",
+        actor_id=None,
+        resource_id=str(payload.upload_id),
+        detail=(
+            f"received={len(payload.rows)} inserted={total_inserted} "
+            f"skipped={total_skipped} "
+            f"(fin={inserted['finance']}/{skipped['finance']}, "
+            f"hr={inserted['hr']}/{skipped['hr']}, "
+            f"sales={inserted['sales']}/{skipped['sales']})"
+        ),
+    )
+
+    await session.commit()
     if total_skipped:
         logger.info(
             "ingest_duplicates_skipped",

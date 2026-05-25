@@ -1,7 +1,8 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
@@ -17,7 +18,9 @@ from app.models.file_upload import FileUpload, UploadStatus
 from app.models.user import Role, User
 from app.schemas.auth import UserLogin
 from app.services.auth_service import AuthService
+from app.services.smtp_service import SmtpService
 from app.services.upload_service import UploadService
+from app.services.windmill_service import WindmillService
 from app.web.dependencies import (
     SESSION_COOKIE_NAME,
     get_current_web_user,
@@ -529,6 +532,7 @@ async def uploads_page(
 @router.post("/uploads")
 async def uploads_submit(
     request: Request,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     user: User = Depends(require_web_roles(Role.admin)),
     session: AsyncSession = Depends(get_db_session),
@@ -539,7 +543,16 @@ async def uploads_submit(
     error = None
 
     try:
-        upload = await UploadService(session, settings).upload_and_trigger(file, user)
+        upload = await UploadService(session, settings).store_upload(file, user)
+        # Run Windmill trigger + dept emails in the background so the user
+        # gets the page back immediately after the file is saved.
+        background_tasks.add_task(
+            UploadService.process_in_background,
+            upload_id=upload.id,
+            actor_id=user.id,
+            actor_username=user.username,
+            settings=settings,
+        )
         success = {
             "filename": upload.original_filename,
             "upload_id": upload.id,
@@ -677,6 +690,290 @@ async def activity_page(
     return templates.TemplateResponse("activity.html", context)
 
 
+async def _build_phase_runs(
+    session: AsyncSession,
+    settings: Settings | None = None,
+    limit: int = 12,
+) -> list[dict]:
+    """Reconstruct the 4-phase pipeline state for each of the most recent uploads.
+
+    Phase order:  Store → Trigger → Split &amp; notify → Ingest.
+    Status values per phase: passed, running, failed, blocked, pending.
+    """
+    uploads = (
+        await session.execute(
+            select(FileUpload).order_by(FileUpload.created_at.desc()).limit(limit)
+        )
+    ).scalars().all()
+
+    if not uploads:
+        return []
+
+    upload_ids = [u.id for u in uploads]
+    upload_id_strs = [str(uid) for uid in upload_ids]
+
+    # Count ingested rows per upload, broken down by department.
+    per_upload: dict[int, dict[str, int]] = {uid: {"finance": 0, "hr": 0, "sales": 0} for uid in upload_ids}
+    dept_models = (("finance", FinanceData), ("hr", HRData), ("sales", SalesData))
+    for dept, model in dept_models:
+        result = await session.execute(
+            select(model.source_upload_id, func.count(model.id))
+            .where(model.source_upload_id.in_(upload_ids))
+            .group_by(model.source_upload_id)
+        )
+        for upload_id, cnt in result.all():
+            if upload_id in per_upload:
+                per_upload[upload_id][dept] = int(cnt)
+
+    # Email audit-log entries per upload — source of truth for "Split & notify".
+    # Ingest audit-log entries per upload — source of truth for "Ingest"
+    # (written by /api/v1/internal/ingest, so the row appears whether or not
+    # any new rows were inserted — duplicates still count as a callback).
+    email_logs: dict[int, list[AuditLog]] = {uid: [] for uid in upload_ids}
+    ingest_logs: dict[int, AuditLog | None] = {uid: None for uid in upload_ids}
+    log_result = await session.execute(
+        select(AuditLog)
+        .where(AuditLog.resource_type == "file_upload")
+        .where(AuditLog.resource_id.in_(upload_id_strs))
+        .where(AuditLog.action.in_(("email.dispatched", "email.failed", "ingest.received")))
+        .order_by(AuditLog.created_at.asc())
+    )
+    for log in log_result.scalars().all():
+        try:
+            uid = int(log.resource_id)
+        except (TypeError, ValueError):
+            continue
+        if uid not in email_logs:
+            continue
+        if log.action == "ingest.received":
+            ingest_logs[uid] = log
+        else:
+            email_logs[uid].append(log)
+
+    # Live Windmill job status for runs we think are still in flight
+    # (triggered but ingest hasn't happened yet). Done in parallel with a short
+    # timeout so an unreachable Windmill doesn't slow this page down.
+    job_status_by_upload: dict[int, dict | None] = {}
+    if settings is not None and not settings.windmill_mock:
+        wm = WindmillService(settings)
+        in_flight = [
+            u for u in uploads
+            if u.windmill_job_id
+            and u.status.value == "workflow_triggered"
+            and ingest_logs.get(u.id) is None
+        ]
+        if in_flight:
+            statuses = await asyncio.gather(
+                *(wm.get_job_status(u.windmill_job_id) for u in in_flight),
+                return_exceptions=True,
+            )
+            for u, status_or_exc in zip(in_flight, statuses):
+                if isinstance(status_or_exc, Exception):
+                    job_status_by_upload[u.id] = {"state": "unknown", "reason": str(status_or_exc)}
+                else:
+                    job_status_by_upload[u.id] = status_or_exc
+
+    runs: list[dict] = []
+    for u in uploads:
+        status_value = u.status.value
+        failed = status_value == "workflow_failed"
+        triggered = status_value == "workflow_triggered"
+        breakdown = per_upload.get(u.id, {"finance": 0, "hr": 0, "sales": 0})
+        ingested_rows = sum(breakdown.values())
+
+        phases: list[dict] = []
+
+        # 1. Store
+        phases.append(
+            {
+                "key": "store",
+                "name": "Store",
+                "icon": "store",
+                "status": "passed",
+                "at": u.created_at,
+                "detail": "File saved &amp; audit logged",
+            }
+        )
+
+        # 2. Trigger
+        if failed:
+            phases.append(
+                {
+                    "key": "trigger",
+                    "name": "Trigger",
+                    "icon": "trigger",
+                    "status": "failed",
+                    "at": u.created_at,
+                    "detail": "Windmill trigger failed",
+                }
+            )
+        elif triggered:
+            job_status_early = job_status_by_upload.get(u.id)
+            if job_status_early and job_status_early.get("state") == "failure":
+                phases.append(
+                    {
+                        "key": "trigger",
+                        "name": "Trigger",
+                        "icon": "trigger",
+                        "status": "failed",
+                        "at": u.created_at,
+                        "detail": f"Windmill job failed: {job_status_early.get('error') or 'unknown error'}",
+                    }
+                )
+            else:
+                phases.append(
+                    {
+                        "key": "trigger",
+                        "name": "Trigger",
+                        "icon": "trigger",
+                        "status": "passed",
+                        "at": u.created_at,
+                        "detail": f"Job {u.windmill_job_id}" if u.windmill_job_id else "Queued in Windmill",
+                    }
+                )
+        else:
+            phases.append(
+                {
+                    "key": "trigger",
+                    "name": "Trigger",
+                    "icon": "trigger",
+                    "status": "pending",
+                    "at": None,
+                    "detail": "Awaiting trigger",
+                }
+            )
+
+        # 3. Split & notify — driven by REAL email audit-log entries.
+        # Per-dept "email.dispatched" or "email.failed" rows are recorded by
+        # UploadService right after Windmill is triggered. If there are no
+        # email log rows at all, we honestly say "Not attempted" rather than
+        # pretending it ran.
+        logs_for_upload = email_logs.get(u.id, [])
+        email_sent = sum(1 for L in logs_for_upload if L.action == "email.dispatched")
+        email_failed = sum(1 for L in logs_for_upload if L.action == "email.failed")
+        email_total = email_sent + email_failed
+        last_error = next(
+            (L.detail for L in reversed(logs_for_upload) if L.action == "email.failed"),
+            None,
+        )
+
+        if failed:
+            phase3_status = "blocked"
+            phase3_detail = "Skipped — trigger failed"
+        elif email_total == 0:
+            if triggered:
+                phase3_status = "running"
+                phase3_detail = "Waiting on department notifications…"
+            else:
+                phase3_status = "pending"
+                phase3_detail = "Waiting"
+        elif email_failed and email_sent == 0:
+            phase3_status = "failed"
+            phase3_detail = (
+                f"All {email_failed} notifications failed"
+                + (f": {last_error}" if last_error else "")
+            )
+        elif email_failed and email_sent:
+            phase3_status = "failed"
+            phase3_detail = (
+                f"{email_sent} sent, {email_failed} failed"
+                + (f" · last error: {last_error}" if last_error else "")
+            )
+        else:
+            phase3_status = "passed"
+            phase3_detail = f"{email_sent} department notifications sent"
+        phases.append(
+            {
+                "key": "split",
+                "name": "Split &amp; notify",
+                "icon": "split",
+                "status": phase3_status,
+                "at": None,
+                "detail": phase3_detail,
+            }
+        )
+
+        # 4. Ingest — driven by the /internal/ingest audit-log row plus, if
+        # available, live Windmill job status. This tells us whether the
+        # callback happened, how many rows we got, and (if not) whether
+        # Windmill itself succeeded or failed.
+        ingest_log = ingest_logs.get(u.id)
+        job_status = job_status_by_upload.get(u.id)
+
+        if failed:
+            phase4_status = "blocked"
+            phase4_detail = "Skipped — trigger failed"
+        elif ingest_log is not None:
+            # Callback definitively happened (whether or not new rows landed).
+            phase4_status = "passed"
+            if ingested_rows > 0:
+                phase4_detail = f"{ingested_rows} rows ingested"
+            else:
+                phase4_detail = "Callback received — all rows were duplicates"
+        elif ingested_rows > 0:
+            # Rows landed before we started audit-logging ingest callbacks
+            # (older uploads). Treat as passed.
+            phase4_status = "passed"
+            phase4_detail = f"{ingested_rows} rows ingested"
+        elif job_status and job_status.get("state") == "failure":
+            phase4_status = "failed"
+            err = (job_status.get("error") or "unknown error")
+            phase4_detail = f"Windmill job failed: {err}"
+        elif job_status and job_status.get("state") == "success":
+            # Windmill says it finished but no ingest callback arrived → real bug.
+            phase4_status = "failed"
+            phase4_detail = (
+                "Windmill job succeeded but never called /api/v1/internal/ingest — "
+                "check the flow's HTTP step (URL / token / worker network)."
+            )
+        elif job_status and job_status.get("state") in ("running", "queued"):
+            phase4_status = "running"
+            phase4_detail = f"Windmill job is {job_status.get('state')}…"
+        elif job_status and job_status.get("state") == "unknown":
+            phase4_status = "running"
+            phase4_detail = f"Status unknown: {job_status.get('reason')}"
+        elif triggered:
+            phase4_status = "running"
+            phase4_detail = "Awaiting ingest callback"
+        else:
+            phase4_status = "pending"
+            phase4_detail = "Waiting"
+
+        phases.append(
+            {
+                "key": "ingest",
+                "name": "Ingest",
+                "icon": "ingest",
+                "status": phase4_status,
+                "at": ingest_log.created_at if ingest_log else None,
+                "detail": phase4_detail,
+            }
+        )
+
+        # Overall status of the run
+        phase_states = [p["status"] for p in phases]
+        if failed or "failed" in phase_states:
+            overall = "failed"
+        elif all(s == "passed" for s in phase_states):
+            overall = "passed"
+        elif "running" in phase_states or triggered:
+            overall = "running"
+        else:
+            overall = "pending"
+
+        runs.append(
+            {
+                "upload": u,
+                "phases": phases,
+                "breakdown": breakdown,
+                "ingested_rows": ingested_rows,
+                "overall": overall,
+            }
+        )
+
+    return runs
+
+
 def _windmill_urls(settings: Settings) -> tuple[str, str]:
     dashboard_url = (
         f"{settings.windmill_public_url.rstrip('/')}"
@@ -731,3 +1028,130 @@ async def workflows_live(
         }
     )
     return templates.TemplateResponse("workflows_live.html", context)
+
+
+# ------------------------------------------------------------------
+# /smtp — admin-only SMTP diagnostics page
+# ------------------------------------------------------------------
+def _smtp_context(request: Request, user: User, settings: Settings, result: dict | None) -> dict:
+    smtp = SmtpService(settings)
+    context = _common_context(request, user, settings)
+    context.update(
+        {
+            "smtp_config_status": smtp.config_status(),
+            "smtp_is_configured": smtp.is_configured(),
+            "result": result,
+            "default_test_recipient": settings.smtp_from or settings.smtp_username or "",
+        }
+    )
+    return context
+
+
+@router.get("/smtp")
+async def smtp_page(
+    request: Request,
+    user: User = Depends(require_web_roles(Role.admin)),
+    settings: Settings = Depends(get_settings),
+):
+    return templates.TemplateResponse(
+        "smtp.html", _smtp_context(request, user, settings, result=None)
+    )
+
+
+@router.post("/smtp/test-connection")
+async def smtp_test_connection(
+    request: Request,
+    user: User = Depends(require_web_roles(Role.admin)),
+    settings: Settings = Depends(get_settings),
+):
+    smtp = SmtpService(settings)
+    result = await smtp.test_connection()
+    result["kind"] = "connection"
+    return templates.TemplateResponse(
+        "smtp.html", _smtp_context(request, user, settings, result=result)
+    )
+
+
+@router.post("/smtp/test-send")
+async def smtp_test_send(
+    request: Request,
+    user: User = Depends(require_web_roles(Role.admin)),
+    settings: Settings = Depends(get_settings),
+    recipient: str = Form(...),
+):
+    smtp = SmtpService(settings)
+    result = await smtp.send_test_email(recipient)
+    result["kind"] = "send"
+    result["recipient"] = recipient
+    return templates.TemplateResponse(
+        "smtp.html", _smtp_context(request, user, settings, result=result)
+    )
+
+
+async def _pipeline_live_context(session: AsyncSession, settings: Settings) -> dict:
+    """Shared context for the full /pipeline page and the /pipeline/refresh partial."""
+    runs = await _build_phase_runs(session, settings=settings, limit=12)
+    summary = {
+        "total": len(runs),
+        "passed": sum(1 for r in runs if r["overall"] == "passed"),
+        "running": sum(1 for r in runs if r["overall"] == "running"),
+        "failed": sum(1 for r in runs if r["overall"] == "failed"),
+        "pending": sum(1 for r in runs if r["overall"] == "pending"),
+    }
+    return {
+        "runs": runs,
+        "latest": runs[0] if runs else None,
+        "history": runs[1:] if len(runs) > 1 else [],
+        "summary": summary,
+        "format_size": _format_size,
+        "status_badge_class": _status_badge_class,
+    }
+
+
+@router.get("/pipeline")
+async def pipeline_phases(
+    request: Request,
+    user: User = Depends(require_web_roles(Role.admin)),
+    session: AsyncSession = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
+):
+    live = await _pipeline_live_context(session, settings)
+    dashboard_url, flow_url = _windmill_urls(settings)
+    metrics = await _upload_metrics(session)
+
+    # Surface ingest config so admins can sanity-check what the Windmill flow
+    # is supposed to call back to.
+    masked_token = (
+        settings.ingest_token[:4] + "…" + settings.ingest_token[-2:]
+        if settings.ingest_token and len(settings.ingest_token) > 8
+        else "(short or unset)"
+    )
+
+    context = _common_context(request, user, settings)
+    context.update(live)
+    context.update(
+        {
+            "metrics": metrics,
+            "windmill_dashboard_url": dashboard_url,
+            "windmill_flow_url": flow_url,
+            "windmill_workflow_path": settings.windmill_workflow_path,
+            "ingest_callback_url": settings.ingest_callback_url,
+            "ingest_token_mask": masked_token,
+            "windmill_mock": settings.windmill_mock,
+        }
+    )
+    return templates.TemplateResponse("pipeline.html", context)
+
+
+@router.get("/pipeline/refresh")
+async def pipeline_refresh(
+    request: Request,
+    user: User = Depends(require_web_roles(Role.admin)),
+    session: AsyncSession = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
+):
+    """HTML partial used by the pipeline page for AJAX live-updates."""
+    live = await _pipeline_live_context(session, settings)
+    context = _common_context(request, user, settings)
+    context.update(live)
+    return templates.TemplateResponse("_pipeline_live.html", context)

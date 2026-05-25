@@ -361,6 +361,116 @@
     });
   }
 
+  /* ---------------- Live polling (pipeline page) ---------------- */
+  function initLivePolling() {
+    var container = document.getElementById('pipeline-live');
+    if (!container) return;
+    var url = container.getAttribute('data-refresh-url');
+    if (!url) return;
+    var interval = parseInt(container.getAttribute('data-refresh-interval') || '4000', 10);
+    if (isNaN(interval) || interval < 1000) interval = 4000;
+
+    var meta = document.getElementById('live-meta');
+    var metaText = meta ? meta.querySelector('.live-meta-text') : null;
+    var metaDot = meta ? meta.querySelector('.live-meta-dot') : null;
+    var toggleBtn = document.getElementById('live-toggle');
+    var refreshBtn = document.getElementById('live-refresh-now');
+
+    var paused = false;
+    var inFlight = false;
+    var lastUpdated = Date.now();
+    var timer = null;
+
+    function setMeta(state, text) {
+      if (!meta) return;
+      meta.classList.remove('is-paused', 'is-error', 'is-updating');
+      if (state) meta.classList.add(state);
+      if (metaText && text) metaText.textContent = text;
+    }
+    function renderAge() {
+      if (paused || !metaText) return;
+      var secs = Math.max(0, Math.round((Date.now() - lastUpdated) / 1000));
+      var s;
+      if (secs < 2) s = 'just now';
+      else if (secs < 60) s = secs + 's ago';
+      else s = Math.round(secs / 60) + 'm ago';
+      metaText.textContent = 'Live · ' + s;
+    }
+    setInterval(renderAge, 1000);
+
+    async function refresh() {
+      if (paused || inFlight) return;
+      inFlight = true;
+      setMeta('is-updating', 'Live · refreshing…');
+      try {
+        var resp = await fetch(url, {
+          credentials: 'same-origin',
+          headers: { 'X-Requested-With': 'fetch' },
+        });
+        if (resp.redirected || resp.status === 401 || resp.status === 403) {
+          // Session expired — drop out of polling
+          setMeta('is-error', 'Session expired — reload');
+          stop();
+          return;
+        }
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        var html = await resp.text();
+        // Only swap if content actually changed (avoids unnecessary repaints)
+        if (html.trim() && html !== container.lastHtml) {
+          container.innerHTML = html;
+          container.lastHtml = html;
+        }
+        lastUpdated = Date.now();
+        setMeta(null, 'Live · just now');
+      } catch (err) {
+        console.warn('pipeline refresh failed', err);
+        setMeta('is-error', 'Update failed — retrying…');
+      } finally {
+        inFlight = false;
+      }
+    }
+
+    function start() {
+      if (timer) return;
+      timer = setInterval(refresh, interval);
+    }
+    function stop() {
+      if (timer) { clearInterval(timer); timer = null; }
+    }
+
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', function () {
+        paused = !paused;
+        if (paused) {
+          stop();
+          setMeta('is-paused', 'Paused');
+          toggleBtn.innerHTML =
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Resume';
+        } else {
+          start();
+          refresh();
+          toggleBtn.innerHTML =
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Pause';
+        }
+      });
+    }
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', function () { refresh(); });
+    }
+
+    // Pause polling when the tab is hidden — saves work & avoids stale flicker.
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) {
+        stop();
+      } else if (!paused) {
+        start();
+        refresh();
+      }
+    });
+
+    start();
+  }
+
   /* ---------------- Back to top ---------------- */
   function initBackToTop() {
     var btn = document.getElementById('back-to-top');
@@ -390,6 +500,7 @@
     initSparklines();
     initParallax();
     initBackToTop();
+    initLivePolling();
 
     // Chart.js may still be loading (defer) — try once, then retry briefly.
     function tryCharts(attempt) {

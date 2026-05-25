@@ -1827,6 +1827,457 @@ img, svg, canvas { display: block; max-width: 100%; }
 }
 .tilt-card:hover { box-shadow: var(--sh-xl); border-color: var(--border-strong); }
 
+/* ====================================================================
+   PIPELINE PHASES PAGE
+   ==================================================================== */
+.spin { animation: spin 1.4s linear infinite; transform-origin: 50% 50%; }
+
+/* Live status chip in toolbar */
+.live-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #047857;
+  background: var(--success-bg);
+  border: 1px solid #a7f3d0;
+  user-select: none;
+}
+.live-meta-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #16a34a;
+  box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.55);
+  animation: livePulse 1.8s ease-in-out infinite;
+}
+.live-meta.is-updating .live-meta-dot { background: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
+.live-meta.is-updating { color: #1d4ed8; background: var(--brand-50); border-color: var(--brand-200); }
+.live-meta.is-paused .live-meta-dot { background: #94a3b8; animation: none; box-shadow: none; }
+.live-meta.is-paused { color: #475569; background: var(--surface-3); border-color: var(--border); }
+.live-meta.is-error .live-meta-dot { background: #dc2626; animation: none; box-shadow: 0 0 0 3px rgba(220,38,38,0.18); }
+.live-meta.is-error { color: #991b1b; background: var(--danger-bg); border-color: #fecaca; }
+
+/* Subtle fade so polled swaps don't jar the eye */
+#pipeline-live { transition: opacity 200ms var(--ease-out); }
+#pipeline-live > * { transition: opacity 200ms var(--ease-out); }
+
+/* Run status pill (top-right of featured card / left of history rows) */
+.run-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.run-status svg { width: 14px; height: 14px; }
+.run-status.compact {
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  justify-content: center;
+  border-radius: 50%;
+}
+.run-status-passed  { background: var(--success-bg); color: var(--success); border-color: #a7f3d0; }
+.run-status-running { background: #e0f2fe; color: #0369a1; border-color: #bae6fd; box-shadow: 0 0 0 0 rgba(2,132,199,0.45); animation: pulseRing 1.8s ease-in-out infinite; }
+.run-status-failed  { background: var(--danger-bg); color: var(--danger); border-color: #fecaca; }
+.run-status-pending { background: var(--surface-3); color: var(--text-soft); border-color: var(--border); }
+@keyframes pulseRing {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(2,132,199,0.45); }
+  50%      { box-shadow: 0 0 0 8px rgba(2,132,199,0); }
+}
+
+/* Featured "fresh run" card */
+.run-feature .card-head { align-items: center; }
+.run-feature .eyebrow { color: var(--brand-600); display: block; margin-bottom: 4px; }
+
+/* The big horizontal phase track */
+.phase-track {
+  display: grid;
+  grid-template-columns: 1fr 32px 1fr 32px 1fr 32px 1fr;
+  align-items: start;
+  gap: 0;
+  margin-top: 14px;
+  padding: 18px 6px 6px;
+  background:
+    radial-gradient(800px 240px at 50% 0%, rgba(99,102,241,0.06), transparent 70%);
+  border-radius: var(--r-lg);
+}
+.phase-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 0 8px;
+  min-width: 0;
+}
+.phase-ring {
+  position: relative;
+  width: 78px;
+  height: 78px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+}
+.phase-circle {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  position: relative;
+  z-index: 1;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.30), 0 12px 26px rgba(15,23,42,0.18);
+}
+.phase-circle svg { width: 26px; height: 26px; }
+.phase-badge {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  box-shadow: 0 6px 14px rgba(15,23,42,0.20);
+  border: 2px solid var(--surface);
+  z-index: 2;
+}
+.phase-badge svg { width: 14px; height: 14px; }
+
+/* Outer ring for "running" pulse */
+.phase-node.phase-running .phase-ring::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px solid #38bdf8;
+  opacity: 0.55;
+  animation: ringPulse 1.6s ease-in-out infinite;
+}
+@keyframes ringPulse {
+  0%, 100% { transform: scale(1); opacity: 0.55; }
+  50%      { transform: scale(1.08); opacity: 0.95; }
+}
+
+.phase-text {
+  margin-top: 12px;
+  min-width: 0;
+}
+.phase-step {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  font-weight: 700;
+}
+.phase-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-strong);
+  margin-top: 2px;
+  letter-spacing: -0.005em;
+}
+.phase-meta {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--surface-3);
+  color: var(--text-soft);
+}
+.phase-detail {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+/* Per-status colors — applied to .phase-node */
+.phase-node.phase-passed  .phase-circle { background: linear-gradient(135deg, #34d399 0%, #10b981 100%); }
+.phase-node.phase-passed  .phase-badge  { background: var(--success); }
+.phase-node.phase-passed  .phase-meta   { background: #d1fae5; color: #047857; }
+
+.phase-node.phase-running .phase-circle { background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%); }
+.phase-node.phase-running .phase-badge  { background: #0284c7; }
+.phase-node.phase-running .phase-meta   { background: #e0f2fe; color: #075985; }
+
+.phase-node.phase-failed  .phase-circle { background: linear-gradient(135deg, #fb7185 0%, #e11d48 100%); }
+.phase-node.phase-failed  .phase-badge  { background: var(--danger); }
+.phase-node.phase-failed  .phase-meta   { background: #fee2e2; color: #b91c1c; }
+
+.phase-node.phase-blocked .phase-circle { background: linear-gradient(135deg, #cbd5e1 0%, #94a3b8 100%); }
+.phase-node.phase-blocked .phase-badge  { background: #64748b; }
+.phase-node.phase-blocked .phase-meta   { background: #e2e8f0; color: #475569; }
+
+.phase-node.phase-pending .phase-circle { background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%); color: #475569; }
+.phase-node.phase-pending .phase-badge  { background: #94a3b8; }
+.phase-node.phase-pending .phase-meta   { background: var(--surface-3); color: var(--text-soft); }
+
+/* Connector segments between phases */
+.phase-connector {
+  height: 4px;
+  align-self: center;
+  margin-top: 38px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  position: relative;
+  overflow: hidden;
+}
+.phase-connector.phase-passed     { background: linear-gradient(90deg, #34d399 0%, #10b981 100%); }
+.phase-connector.phase-failed     { background: linear-gradient(90deg, #fb7185 0%, #e11d48 100%); }
+.phase-connector.phase-blocked    { background: linear-gradient(90deg, #cbd5e1 0%, #94a3b8 100%); }
+.phase-connector.phase-running    { background: var(--surface-3); }
+.phase-connector.phase-running::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, #60a5fa 50%, transparent 100%);
+  background-size: 50% 100%;
+  background-repeat: no-repeat;
+  animation: connectorFlow 1.4s linear infinite;
+}
+@keyframes connectorFlow {
+  from { background-position: -50% 0; }
+  to   { background-position: 150% 0; }
+}
+
+/* Breakdown chips under featured card */
+.run-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--border);
+}
+.breakdown-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-soft);
+}
+.breakdown-pill .swatch { width: 10px; height: 10px; border-radius: 3px; }
+.breakdown-pill strong { color: var(--text-strong); margin-left: 2px; }
+.breakdown-pill.total { background: var(--brand-50); border-color: var(--brand-200); color: var(--brand-700); }
+
+/* History rows — compact runs */
+.run-list { display: flex; flex-direction: column; gap: 10px; }
+.run-row {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  transition: background 160ms, border-color 160ms, transform 120ms;
+}
+.run-row:hover { background: var(--surface); border-color: var(--border-strong); transform: translateY(-1px); }
+.run-row-passed  { border-left: 3px solid var(--success); }
+.run-row-running { border-left: 3px solid #0284c7; }
+.run-row-failed  { border-left: 3px solid var(--danger); }
+.run-row-pending { border-left: 3px solid var(--text-faint); }
+.run-row-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.run-row-id { display: flex; align-items: center; gap: 12px; }
+.run-row-title { font-size: 13.5px; color: var(--text-strong); }
+.run-row-title strong { margin-left: 6px; }
+.run-row-meta { margin-top: 2px; }
+
+/* Compact phase chip strip */
+.phase-strip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.phase-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.phase-chip .chip-icon { width: 14px; height: 14px; display: inline-grid; place-items: center; }
+.phase-chip .chip-icon svg { width: 12px; height: 12px; }
+.phase-chip.phase-passed  { background: #d1fae5; color: #047857; border-color: #a7f3d0; }
+.phase-chip.phase-running { background: #e0f2fe; color: #075985; border-color: #bae6fd; }
+.phase-chip.phase-failed  { background: #fee2e2; color: #b91c1c; border-color: #fecaca; }
+.phase-chip.phase-blocked { background: #e2e8f0; color: #475569; border-color: #cbd5e1; }
+.phase-chip.phase-pending { background: var(--surface-3); color: var(--text-soft); border-color: var(--border); }
+.chip-connector {
+  display: inline-block;
+  width: 18px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--border);
+}
+.chip-connector.phase-passed  { background: linear-gradient(90deg, #34d399 0%, #10b981 100%); }
+.chip-connector.phase-failed  { background: linear-gradient(90deg, #fb7185 0%, #e11d48 100%); }
+.chip-connector.phase-blocked { background: linear-gradient(90deg, #cbd5e1 0%, #94a3b8 100%); }
+.chip-connector.phase-running { background: linear-gradient(90deg, #60a5fa 0%, #2563eb 100%); }
+
+/* Legend grid */
+.legend-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-strong);
+}
+.legend-item strong { display: block; }
+.legend-dot {
+  width: 32px; height: 32px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  flex: 0 0 32px;
+}
+.legend-dot svg { width: 16px; height: 16px; }
+.legend-item.phase-passed  .legend-dot { background: linear-gradient(135deg, #34d399 0%, #10b981 100%); }
+.legend-item.phase-running .legend-dot { background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%); }
+.legend-item.phase-failed  .legend-dot { background: linear-gradient(135deg, #fb7185 0%, #e11d48 100%); }
+.legend-item.phase-blocked .legend-dot { background: linear-gradient(135deg, #cbd5e1 0%, #94a3b8 100%); }
+.legend-item.phase-pending .legend-dot { background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%); color: #475569; }
+
+/* Responsive: collapse the big stepper to a vertical timeline */
+@media (max-width: 980px) {
+  .phase-track {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 16px;
+  }
+  .phase-node { flex-direction: row; align-items: flex-start; text-align: left; gap: 14px; }
+  .phase-text { margin-top: 0; }
+  .phase-connector {
+    width: 4px;
+    height: 28px;
+    margin: 0 0 0 39px;
+  }
+  .phase-connector.phase-running::after {
+    background: linear-gradient(180deg, transparent 0%, #60a5fa 50%, transparent 100%);
+    background-size: 100% 50%;
+    animation-name: connectorFlowV;
+  }
+  @keyframes connectorFlowV {
+    from { background-position: 0 -50%; }
+    to   { background-position: 0 150%; }
+  }
+}
+
+/* ====================================================================
+   SMTP DIAGNOSTICS PAGE
+   ==================================================================== */
+.smtp-config {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.smtp-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 200px) 1fr 28px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.smtp-row:last-child { border-bottom: 0; }
+.smtp-row.is-set     { background: var(--surface); }
+.smtp-row.is-missing { background: #fff7ed; }
+.smtp-row.is-missing .smtp-dot { background: var(--warning); }
+.smtp-row.is-set .smtp-dot     { background: var(--success); }
+.smtp-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+.smtp-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px rgba(15,23,42,0.04);
+}
+.smtp-name { font-family: "SFMono-Regular", Menlo, Consolas, monospace; font-size: 12px; }
+.smtp-val { color: var(--text-strong); word-break: break-all; }
+.smtp-val em { color: var(--text-faint); font-style: normal; }
+.smtp-status {
+  width: 24px; height: 24px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  color: #fff;
+}
+.smtp-status svg { width: 14px; height: 14px; }
+.smtp-row.is-set     .smtp-status { background: var(--success); }
+.smtp-row.is-missing .smtp-status { background: var(--warning); }
+
+/* Action rows (Test connection / Send test email) */
+.smtp-action {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px;
+  margin-bottom: 10px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.smtp-action:last-of-type { margin-bottom: 0; }
+.smtp-action-body { flex: 1 1 280px; min-width: 0; }
+.smtp-action-title {
+  font-weight: 700;
+  color: var(--text-strong);
+  font-size: 14px;
+  letter-spacing: -0.005em;
+  margin-bottom: 2px;
+}
+.smtp-action-desc {
+  margin: 0 0 8px 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+.smtp-action .form-control { max-width: 360px; }
+.smtp-action .btn { align-self: flex-start; flex-shrink: 0; }
+.smtp-action .btn:disabled { opacity: 0.55; }
+
 /* ---------- Back-to-top button ---------- */
 .back-to-top {
   position: fixed;

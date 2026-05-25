@@ -1,0 +1,142 @@
+{% extends "_layout.html" %}
+{% set active = 'activity' %}
+
+{% block page_title %}Activity log{% endblock %}
+{% block crumbs %}Console &rsaquo; Activity{% endblock %}
+
+{% block content %}
+<div class="page-header reveal-on-load">
+  <div>
+    <h1 class="section-title">
+      {% if is_admin %}All activity{% else %}Your activity{% endif %}
+    </h1>
+    <p class="section-subtitle">
+      {% if is_admin %}
+      Every audit-log event across the platform — sign-ins, file events, workflow triggers and ingest callbacks.
+      {% else %}
+      Audit-log events caused by your account.
+      {% endif %}
+    </p>
+  </div>
+  <span class="badge {{ role_badge_class }}">{{ role_label }}</span>
+</div>
+
+<section class="card reveal-on-load delay-1">
+  <form method="get" action="/activity" class="filter-bar">
+    <div class="filter-search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" name="q" value="{{ pagination.q }}" placeholder="Search action, resource, detail…" autocomplete="off" />
+      {% if pagination.q %}
+      <a class="filter-clear" href="/activity?action={{ pagination.action }}&range={{ pagination.range }}" title="Clear">×</a>
+      {% endif %}
+    </div>
+    <label class="filter-inline">
+      <span class="small-text">Action</span>
+      <select name="action" class="form-control form-control-sm" onchange="this.form.submit()">
+        <option value="all" {% if pagination.action == 'all' %}selected{% endif %}>All actions</option>
+        {% for a in action_prefixes %}
+        <option value="{{ a }}" {% if pagination.action == a %}selected{% endif %}>{{ a }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="filter-inline">
+      <span class="small-text">Range</span>
+      <select name="range" class="form-control form-control-sm" onchange="this.form.submit()">
+        {% for r in range_choices %}
+        <option value="{{ r }}" {% if pagination.range == r %}selected{% endif %}>
+          {% if r == '24h' %}Last 24h{% elif r == '7d' %}Last 7d{% elif r == '30d' %}Last 30d{% else %}All time{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="filter-inline">
+      <span class="small-text">Rows/page</span>
+      <select name="page_size" class="form-control form-control-sm" onchange="this.form.submit()">
+        {% for size in pagination.size_choices %}
+        <option value="{{ size }}" {% if size == pagination.page_size %}selected{% endif %}>{{ size }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+    <input type="hidden" name="page" value="1" />
+  </form>
+
+  <div class="card-head" style="margin-top:14px; margin-bottom:6px;">
+    <p class="card-subtitle" style="margin:0;">
+      {% if pagination.total %}
+      Showing <strong>{{ pagination.first_index }}&ndash;{{ pagination.last_index }}</strong>
+      of <strong>{{ pagination.total }}</strong> events
+      {% if pagination.q %}matching &ldquo;<strong>{{ pagination.q }}</strong>&rdquo;{% endif %}.
+      {% else %}
+      No events match the current filters.
+      {% endif %}
+    </p>
+  </div>
+
+  {% if items %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Action</th>
+          <th>Resource</th>
+          {% if is_admin %}<th>Actor</th>{% endif %}
+          <th>Detail</th>
+          <th class="t-right">When</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for it in items %}
+        <tr>
+          <td class="mono">{{ it.id }}</td>
+          <td>
+            <span class="activity-dot {% if 'fail' in it.action %}fail{% elif 'trigger' in it.action %}success{% elif 'login' in it.action %}warn{% endif %}" style="display:inline-block;margin-right:8px;vertical-align:middle;"></span>
+            <strong>{{ it.action }}</strong>
+          </td>
+          <td class="mono small-text">{{ it.resource_type }}{% if it.resource_id %} <span class="text-muted">#{{ it.resource_id }}</span>{% endif %}</td>
+          {% if is_admin %}<td class="mono small-text">{% if it.actor_id %}#{{ it.actor_id }}{% else %}—{% endif %}</td>{% endif %}
+          <td class="small-text">{{ (it.detail or '')|truncate(80) }}</td>
+          <td class="small-text t-right">{{ it.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% set qparam = '&q=' ~ pagination.q if pagination.q else '' %}
+  {% set actparam = '&action=' ~ pagination.action if pagination.action and pagination.action != 'all' else '' %}
+  {% set rangeparam = '&range=' ~ pagination.range %}
+  {% set extra = qparam ~ actparam ~ rangeparam %}
+  <nav class="pager" aria-label="Pagination">
+    <span class="pager-info">
+      Page <strong>{{ pagination.page }}</strong> of <strong>{{ pagination.total_pages }}</strong>
+    </span>
+    <div class="pager-controls">
+      {% if pagination.has_prev %}
+      <a class="btn btn-secondary btn-sm" href="?page=1&page_size={{ pagination.page_size }}{{ extra }}">&laquo; First</a>
+      <a class="btn btn-secondary btn-sm" href="?page={{ pagination.prev_page }}&page_size={{ pagination.page_size }}{{ extra }}">&lsaquo; Prev</a>
+      {% else %}
+      <span class="btn btn-secondary btn-sm" aria-disabled="true">&laquo; First</span>
+      <span class="btn btn-secondary btn-sm" aria-disabled="true">&lsaquo; Prev</span>
+      {% endif %}
+      {% if pagination.has_next %}
+      <a class="btn btn-primary btn-sm" href="?page={{ pagination.next_page }}&page_size={{ pagination.page_size }}{{ extra }}">Next &rsaquo;</a>
+      <a class="btn btn-secondary btn-sm" href="?page={{ pagination.total_pages }}&page_size={{ pagination.page_size }}{{ extra }}">Last &raquo;</a>
+      {% else %}
+      <span class="btn btn-primary btn-sm" aria-disabled="true">Next &rsaquo;</span>
+      <span class="btn btn-secondary btn-sm" aria-disabled="true">Last &raquo;</span>
+      {% endif %}
+    </div>
+  </nav>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">&#9636;</div>
+    <div>No activity matches your filters.</div>
+    <div class="small-text mt-4">
+      Try removing the search term or widening the time range.
+    </div>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

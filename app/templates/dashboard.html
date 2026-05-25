@@ -5,104 +5,454 @@
 {% block crumbs %}Console &rsaquo; Dashboard{% endblock %}
 
 {% block content %}
-<h1 class="section-title">Overview</h1>
-<p class="section-subtitle">
-  You are signed in as <strong>{{ user.username }}</strong>
-  ({{ role_label }}). Your access scope below.
-</p>
-
-<div class="stat-grid tilt-stage">
-  <div class="stat-card tilt-card reveal-on-load delay-1">
-    <div class="stat-label">Account</div>
-    <div class="stat-value">{{ user.username }}</div>
-    <div class="stat-foot">ID #{{ user.id }}</div>
-  </div>
-  <div class="stat-card tilt-card reveal-on-load delay-2">
-    <div class="stat-label">Role</div>
-    <div class="stat-value">{{ role_label }}</div>
-    <div class="stat-foot">Determines which actions you can perform</div>
-  </div>
-  <div class="stat-card tilt-card reveal-on-load delay-3">
-    <div class="stat-label">Scope</div>
-    <div class="stat-value">
-      {% if is_admin %}All departments
-      {% else %}{{ department|capitalize }} only
-      {% endif %}
-    </div>
-    <div class="stat-foot">RBAC-enforced on every request</div>
-  </div>
-  <div class="stat-card tilt-card reveal-on-load delay-4">
-    <div class="stat-label">
-      {% if is_admin %}Status{% else %}Records available{% endif %}
-    </div>
-    {% if is_admin %}
-    <div class="stat-value" style="color: var(--success)">Active</div>
-    <div class="stat-foot">Session expires automatically</div>
-    {% else %}
-    <div class="stat-value" data-count-target="{{ pagination.total if pagination else 0 }}">0</div>
-    <div class="stat-foot">Total rows ingested by the pipeline</div>
-    {% endif %}
-  </div>
-</div>
-
 {% if is_admin %}
-<h2 class="section-title mt-6">Actions available to you</h2>
-<p class="section-subtitle">Cards reflect your role permissions.</p>
-
-<div class="action-grid tilt-stage">
-  <a href="/uploads" class="action-card tilt-card reveal-on-load delay-1">
-    <div class="icon">U</div>
-    <h3>Upload Loan File</h3>
-    <p>Submit a new CSV to trigger the Windmill ingestion pipeline and notify departments.</p>
-    <div class="meta"><span class="role-pill">Admin only</span></div>
-    <div class="cta">Go to uploads &rsaquo;</div>
-  </a>
-
-  <a href="/workflows" class="action-card tilt-card reveal-on-load delay-2">
-    <div class="icon">W</div>
-    <h3>Windmill Workflows</h3>
-    <p>Open the live pipeline dashboard &mdash; run history, step status, and logs in real time.</p>
-    <div class="meta"><span class="role-pill">Admin only</span></div>
-    <div class="cta">Open workflows &rsaquo;</div>
-  </a>
-
-  <a href="/docs" target="_blank" rel="noopener" class="action-card tilt-card reveal-on-load delay-3">
-    <div class="icon">A</div>
-    <h3>API Documentation</h3>
-    <p>Browse the OpenAPI reference for upload, ingest and data endpoints.</p>
-    <div class="meta"><span class="role-pill">All roles</span></div>
-    <div class="cta">Open API docs &rsaquo;</div>
-  </a>
+{# ============================================================
+   ADMIN VIEW — full pipeline visibility
+   ============================================================ #}
+<div class="hero reveal-on-load">
+  <div class="hero-orb" aria-hidden="true"></div>
+  <div class="hero-content">
+    <div>
+      <span class="eyebrow" style="color:#a5b4fc;">Administrator workspace</span>
+      <h1>Good to see you, {{ user.username }}.</h1>
+      <p class="hero-sub">
+        You have full visibility into the ingestion pipeline. Trigger uploads,
+        watch flows execute in real time, and audit every step.
+      </p>
+      <div class="hero-actions">
+        <a href="/uploads" class="btn btn-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+          New upload
+        </a>
+        <a href="/workflows" class="btn btn-secondary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Live workflows
+        </a>
+      </div>
+    </div>
+    <div class="hero-side">
+      <div class="hero-stat">
+        <div class="lbl">Pipeline runs</div>
+        <div class="val">{{ metrics.total }}</div>
+        <div class="delta">{{ metrics.success_rate }}% success</div>
+      </div>
+      <div class="hero-stat">
+        <div class="lbl">Records ingested</div>
+        <div class="val">{{ dept_counts.total }}</div>
+        <div class="delta">across 3 departments</div>
+      </div>
+      <div class="hero-stat">
+        <div class="lbl">Storage</div>
+        <div class="val">{{ format_size(metrics.total_bytes) }}</div>
+        <div class="delta">all uploads</div>
+      </div>
+      <div class="hero-stat">
+        <div class="lbl">Failures</div>
+        <div class="val">{{ metrics.failed }}</div>
+        <div class="delta {{ 'neg' if metrics.failed else '' }}">
+          {% if metrics.failed %}needs review{% else %}all clear{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
+
+<div class="kpi-grid">
+  <div class="kpi k-violet reveal-on-load delay-1">
+    <div class="kpi-head">
+      <div class="kpi-label">Total uploads</div>
+      <div class="kpi-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      </div>
+    </div>
+    <div class="kpi-value" data-count-target="{{ metrics.total }}">0</div>
+    <div class="kpi-foot">
+      <span class="delta up">+{{ metrics.triggered }}</span>
+      <span>triggered to Windmill</span>
+    </div>
+    <canvas class="kpi-spark" data-spark='{{ uploads_series|tojson }}' data-spark-color="#6366f1"></canvas>
+  </div>
+
+  <div class="kpi k-emerald reveal-on-load delay-2">
+    <div class="kpi-head">
+      <div class="kpi-label">Success rate</div>
+      <div class="kpi-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+    </div>
+    <div class="kpi-value">{{ metrics.success_rate }}<span style="font-size:18px;color:var(--text-muted)">%</span></div>
+    <div class="kpi-foot">
+      <span class="delta {{ 'up' if metrics.success_rate >= 80 else ('flat' if metrics.success_rate else 'down') }}">
+        {{ metrics.success_rate }}%
+      </span>
+      <span>last {{ metrics.total }} runs</span>
+    </div>
+    <canvas class="kpi-spark" data-spark='{{ ingest_series|tojson }}' data-spark-color="#10b981"></canvas>
+  </div>
+
+  <div class="kpi k-cyan reveal-on-load delay-3">
+    <div class="kpi-head">
+      <div class="kpi-label">Records ingested</div>
+      <div class="kpi-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 11v6c0 1.66 4.03 3 9 3s9-1.34 9-3v-6"/></svg>
+      </div>
+    </div>
+    <div class="kpi-value" data-count-target="{{ dept_counts.total }}">0</div>
+    <div class="kpi-foot">
+      <span class="delta up">{{ dept_counts.finance }} fin</span>
+      <span>· {{ dept_counts.hr }} HR · {{ dept_counts.sales }} sales</span>
+    </div>
+    <canvas class="kpi-spark" data-spark='{{ ingest_series|tojson }}' data-spark-color="#06b6d4"></canvas>
+  </div>
+
+  <div class="kpi k-rose reveal-on-load delay-4">
+    <div class="kpi-head">
+      <div class="kpi-label">Failed runs</div>
+      <div class="kpi-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      </div>
+    </div>
+    <div class="kpi-value" data-count-target="{{ metrics.failed }}">0</div>
+    <div class="kpi-foot">
+      <span class="delta {{ 'down' if metrics.failed else 'flat' }}">{{ metrics.failed }}</span>
+      <span>workflow failures</span>
+    </div>
+    <canvas class="kpi-spark" data-spark='{{ uploads_series|tojson }}' data-spark-color="#f43f5e"></canvas>
+  </div>
+</div>
+
+<div class="dash-grid reveal-on-load delay-3">
+  <section class="card card-glow">
+    <div class="card-head">
+      <div>
+        <h2 class="card-title">Pipeline volume — last 7 days</h2>
+        <p class="card-subtitle">Uploads triggered vs. rows ingested per day.</p>
+      </div>
+      <div class="card-head-right">
+        <span class="badge badge-finance">Live</span>
+      </div>
+    </div>
+    <div class="chart-wrap tall">
+      <canvas id="chart-pipeline-volume"
+              data-uploads='{{ uploads_series|tojson }}'
+              data-ingest='{{ ingest_series|tojson }}'></canvas>
+    </div>
+    <div class="chart-legend">
+      <span><span class="swatch" style="background:#6366f1"></span> Uploads triggered</span>
+      <span><span class="swatch" style="background:#06b6d4"></span> Rows ingested</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2 class="card-title">Department mix</h2>
+        <p class="card-subtitle">Rows split by department.</p>
+      </div>
+    </div>
+    <div class="chart-wrap" style="height: 170px;">
+      <canvas id="chart-dept-donut"
+              data-finance="{{ dept_counts.finance }}"
+              data-hr="{{ dept_counts.hr }}"
+              data-sales="{{ dept_counts.sales }}"></canvas>
+    </div>
+    <div class="donut-stack" style="margin-top:10px;">
+      <div class="donut-row">
+        <span class="name"><span class="swatch" style="background:#10b981"></span> Finance</span>
+        <span class="val">{{ dept_counts.finance }}</span>
+      </div>
+      <div class="donut-row">
+        <span class="name"><span class="swatch" style="background:#f59e0b"></span> Human Resources</span>
+        <span class="val">{{ dept_counts.hr }}</span>
+      </div>
+      <div class="donut-row">
+        <span class="name"><span class="swatch" style="background:#ec4899"></span> Sales</span>
+        <span class="val">{{ dept_counts.sales }}</span>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="dash-row cols-2 reveal-on-load delay-4">
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2 class="card-title">How the pipeline runs</h2>
+        <p class="card-subtitle">Every upload flows through four stages.</p>
+      </div>
+    </div>
+    <div class="pipeline">
+      <div class="pipeline-step">
+        <span class="num">1</span><span class="name">Store</span>
+        <span class="desc">File saved &amp; audit logged.</span>
+      </div>
+      <div class="pipeline-step">
+        <span class="num">2</span><span class="name">Trigger</span>
+        <span class="desc">Flow queued in Windmill.</span>
+      </div>
+      <div class="pipeline-step">
+        <span class="num">3</span><span class="name">Split</span>
+        <span class="desc">Rows split, emails sent.</span>
+      </div>
+      <div class="pipeline-step">
+        <span class="num">4</span><span class="name">Ingest</span>
+        <span class="desc">Inserted into Postgres.</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2 class="card-title">Quick actions</h2>
+        <p class="card-subtitle">Jump to the most common tasks.</p>
+      </div>
+    </div>
+    <div class="quick-actions">
+      <a href="/uploads" class="quick-action">
+        <span class="qa-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        </span>
+        <span class="qa-body">
+          <span class="qa-title">Upload file</span>
+          <span class="qa-desc">Trigger the ingestion pipeline</span>
+        </span>
+        <svg class="qa-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </a>
+      <a href="/workflows" class="quick-action alt-cyan">
+        <span class="qa-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </span>
+        <span class="qa-body">
+          <span class="qa-title">Live workflows</span>
+          <span class="qa-desc">Run history &amp; logs</span>
+        </span>
+        <svg class="qa-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </a>
+      <a href="/docs" target="_blank" rel="noopener" class="quick-action alt-violet">
+        <span class="qa-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+        </span>
+        <span class="qa-body">
+          <span class="qa-title">API documentation</span>
+          <span class="qa-desc">OpenAPI reference</span>
+        </span>
+        <svg class="qa-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </a>
+    </div>
+  </section>
+</div>
+
+<section class="card reveal-on-load delay-1">
+  <div class="card-head">
+    <div>
+      <h2 class="card-title">Recent uploads</h2>
+      <p class="card-subtitle">Most recent 6 ingestion jobs.</p>
+    </div>
+    <div class="card-head-right">
+      <a href="/activity" class="btn btn-ghost btn-sm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        View activity
+      </a>
+      <a href="/uploads" class="btn btn-secondary btn-sm">View all uploads &rsaquo;</a>
+    </div>
+  </div>
+  {% if recent_uploads %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr><th>#</th><th>Filename</th><th>Status</th><th>Size</th><th>When</th></tr>
+      </thead>
+      <tbody>
+        {% for u in recent_uploads %}
+        <tr>
+          <td class="mono">{{ u.id }}</td>
+          <td><strong>{{ u.original_filename }}</strong></td>
+          <td><span class="badge {{ status_badge_class(u.status.value) }}">{{ u.status.value }}</span></td>
+          <td class="mono">{{ format_size(u.size_bytes) }}</td>
+          <td class="small-text">{{ u.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">&#9636;</div>
+    <div>No uploads yet.</div>
+    <div class="small-text mt-4">Head to <a href="/uploads" class="link-strong">Uploads</a> to submit your first file.</div>
+  </div>
+  {% endif %}
+</section>
 
 {% else %}
+{# ============================================================
+   DEPARTMENT USER VIEW — only their own department + their own activity
+   ============================================================ #}
+<div class="hero reveal-on-load">
+  <div class="hero-orb" aria-hidden="true"></div>
+  <div class="hero-content">
+    <div>
+      <span class="eyebrow" style="color:#a5b4fc;">{{ role_label }} workspace</span>
+      <h1>Good to see you, {{ user.username }}.</h1>
+      <p class="hero-sub">
+        This is your {{ department|capitalize }} dataset. It refreshes automatically
+        each time the ingestion pipeline delivers new {{ department }} rows. You only see
+        records and activity that belong to you.
+      </p>
+      <div class="hero-actions">
+        <a href="/dashboard" class="btn btn-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          Refresh data
+        </a>
+      </div>
+    </div>
+    <div class="hero-side">
+      <div class="hero-stat">
+        <div class="lbl">Your records</div>
+        <div class="val">{{ dept_metrics.total }}</div>
+        <div class="delta">{{ department|capitalize }} dataset</div>
+      </div>
+      <div class="hero-stat">
+        <div class="lbl">Total amount</div>
+        <div class="val">{{ "%.2f"|format(dept_metrics.total_amount) }}</div>
+        <div class="delta">across all rows</div>
+      </div>
+      <div class="hero-stat">
+        <div class="lbl">Average amount</div>
+        <div class="val">{{ "%.2f"|format(dept_metrics.avg_amount) }}</div>
+        <div class="delta">per record</div>
+      </div>
+      <div class="hero-stat">
+        <div class="lbl">Last update</div>
+        <div class="val" style="font-size:16px;">
+          {% if dept_metrics.last_at %}{{ dept_metrics.last_at.strftime('%b %d') }}{% else %}—{% endif %}
+        </div>
+        <div class="delta">
+          {% if dept_metrics.last_at %}{{ dept_metrics.last_at.strftime('%H:%M UTC') }}{% else %}no data yet{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
-<section class="card mt-6 reveal-on-load delay-3">
+<div class="kpi-grid">
+  <div class="kpi k-violet reveal-on-load delay-1">
+    <div class="kpi-head">
+      <div class="kpi-label">Records</div>
+      <div class="kpi-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 11v6c0 1.66 4.03 3 9 3s9-1.34 9-3v-6"/></svg>
+      </div>
+    </div>
+    <div class="kpi-value" data-count-target="{{ dept_metrics.total }}">0</div>
+    <div class="kpi-foot"><span class="delta up">{{ department|capitalize }}</span> only</div>
+    <canvas class="kpi-spark" data-spark='{{ dept_series|tojson }}' data-spark-color="#6366f1"></canvas>
+  </div>
+
+  <div class="kpi k-emerald reveal-on-load delay-2">
+    <div class="kpi-head">
+      <div class="kpi-label">Total amount</div>
+      <div class="kpi-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      </div>
+    </div>
+    <div class="kpi-value">{{ "%.0f"|format(dept_metrics.total_amount) }}</div>
+    <div class="kpi-foot"><span class="delta flat">{{ "%.2f"|format(dept_metrics.avg_amount) }}</span> avg per record</div>
+    <canvas class="kpi-spark" data-spark='{{ dept_series|tojson }}' data-spark-color="#10b981"></canvas>
+  </div>
+
+  <div class="kpi k-cyan reveal-on-load delay-3">
+    <div class="kpi-head">
+      <div class="kpi-label">Last 14 days</div>
+      <div class="kpi-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      </div>
+    </div>
+    <div class="kpi-value" data-count-target="{{ dept_series | sum(attribute='value') }}">0</div>
+    <div class="kpi-foot"><span class="delta flat">rolling 14d</span> ingest</div>
+    <canvas class="kpi-spark" data-spark='{{ dept_series|tojson }}' data-spark-color="#06b6d4"></canvas>
+  </div>
+
+  <div class="kpi k-amber reveal-on-load delay-4">
+    <div class="kpi-head">
+      <div class="kpi-label">Last update</div>
+      <div class="kpi-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      </div>
+    </div>
+    <div class="kpi-value" style="font-size:20px;">
+      {% if dept_metrics.last_at %}{{ dept_metrics.last_at.strftime('%b %d') }}{% else %}—{% endif %}
+    </div>
+    <div class="kpi-foot">
+      <span class="delta flat">
+        {% if dept_metrics.last_at %}{{ dept_metrics.last_at.strftime('%H:%M') }}{% else %}none yet{% endif %}
+      </span>
+      <span>UTC</span>
+    </div>
+    <canvas class="kpi-spark" data-spark='{{ dept_series|tojson }}' data-spark-color="#f59e0b"></canvas>
+  </div>
+</div>
+
+<section class="card card-glow reveal-on-load delay-3">
+  <div class="card-head">
+    <div>
+      <h2 class="card-title">{{ department|capitalize }} volume — last 14 days</h2>
+      <p class="card-subtitle">Rows added to your dataset per day.</p>
+    </div>
+    <div class="card-head-right">
+      <a href="/activity" class="btn btn-ghost btn-sm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Your activity
+      </a>
+    </div>
+  </div>
+  <div class="chart-wrap">
+    <canvas id="chart-pipeline-volume"
+            data-uploads='{{ dept_series|tojson }}'
+            data-ingest='{{ dept_series|tojson }}'
+            data-single="1"></canvas>
+  </div>
+</section>
+
+<section class="card reveal-on-load delay-4">
   <div class="card-head">
     <div>
       <h2 class="card-title">{{ department|capitalize }} records</h2>
       <p class="card-subtitle">
         {% if pagination and pagination.total %}
         Showing <strong>{{ pagination.first_index }}&ndash;{{ pagination.last_index }}</strong>
-        of <strong>{{ pagination.total }}</strong> records ingested by the Windmill pipeline.
+        of <strong>{{ pagination.total }}</strong> records{% if pagination.q %} matching &ldquo;<strong>{{ pagination.q }}</strong>&rdquo;{% endif %}.
+        {% else %}
+        {% if pagination and pagination.q %}
+        No records match &ldquo;<strong>{{ pagination.q }}</strong>&rdquo;.
         {% else %}
         Rows allocated to your department by the Windmill pipeline.
         {% endif %}
+        {% endif %}
       </p>
     </div>
-    <div class="card-head-right">
-      <form method="get" action="/dashboard" class="page-size-form">
-        <label for="page_size" class="small-text">Rows&nbsp;per&nbsp;page</label>
-        <select name="page_size" id="page_size" class="form-control form-control-sm" onchange="this.form.submit()">
-          {% for size in pagination.size_choices %}
-          <option value="{{ size }}" {% if size == pagination.page_size %}selected{% endif %}>{{ size }}</option>
-          {% endfor %}
-        </select>
-        <input type="hidden" name="page" value="1" />
-      </form>
-      <span class="badge {{ role_badge_class }}">{{ role_label }}</span>
-    </div>
+    <span class="badge {{ role_badge_class }}">{{ role_label }}</span>
   </div>
+
+  <form method="get" action="/dashboard" class="filter-bar">
+    <div class="filter-search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" name="q" value="{{ pagination.q if pagination else '' }}" placeholder="Search by employee name…" autocomplete="off" />
+      {% if pagination and pagination.q %}
+      <a class="filter-clear" href="/dashboard?page_size={{ pagination.page_size }}" title="Clear search">×</a>
+      {% endif %}
+    </div>
+    <label class="filter-inline">
+      <span class="small-text">Rows/page</span>
+      <select name="page_size" class="form-control form-control-sm" onchange="this.form.submit()">
+        {% for size in pagination.size_choices %}
+        <option value="{{ size }}" {% if size == pagination.page_size %}selected{% endif %}>{{ size }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+    <input type="hidden" name="page" value="1" />
+  </form>
 
   {% if department_rows %}
   <div class="table-wrap">
@@ -121,7 +471,7 @@
         {% for row in department_rows %}
         <tr>
           <td class="mono">{{ row.id }}</td>
-          <td>{{ row.employee_name }}</td>
+          <td><strong>{{ row.employee_name }}</strong></td>
           <td class="mono t-right">{{ "%.2f"|format(row.amount) }}</td>
           <td class="small-text">{{ row.record_date.strftime('%Y-%m-%d') }}</td>
           <td class="mono small-text">#{{ row.source_upload_id }}</td>
@@ -132,22 +482,23 @@
     </table>
   </div>
 
+  {% set qparam = '&q=' ~ pagination.q if pagination.q else '' %}
   <nav class="pager" aria-label="Pagination">
-    <span class="pager-info small-text">
+    <span class="pager-info">
       Page <strong>{{ pagination.page }}</strong> of <strong>{{ pagination.total_pages }}</strong>
     </span>
     <div class="pager-controls">
       {% if pagination.has_prev %}
-      <a class="btn btn-secondary btn-sm" href="?page=1&page_size={{ pagination.page_size }}" title="First page">&laquo; First</a>
-      <a class="btn btn-secondary btn-sm" href="?page={{ pagination.prev_page }}&page_size={{ pagination.page_size }}">&lsaquo; Prev</a>
+      <a class="btn btn-secondary btn-sm" href="?page=1&page_size={{ pagination.page_size }}{{ qparam }}" title="First page">&laquo; First</a>
+      <a class="btn btn-secondary btn-sm" href="?page={{ pagination.prev_page }}&page_size={{ pagination.page_size }}{{ qparam }}">&lsaquo; Prev</a>
       {% else %}
       <span class="btn btn-secondary btn-sm" aria-disabled="true">&laquo; First</span>
       <span class="btn btn-secondary btn-sm" aria-disabled="true">&lsaquo; Prev</span>
       {% endif %}
 
       {% if pagination.has_next %}
-      <a class="btn btn-primary btn-sm" href="?page={{ pagination.next_page }}&page_size={{ pagination.page_size }}">Next &rsaquo;</a>
-      <a class="btn btn-secondary btn-sm" href="?page={{ pagination.total_pages }}&page_size={{ pagination.page_size }}" title="Last page">Last &raquo;</a>
+      <a class="btn btn-primary btn-sm" href="?page={{ pagination.next_page }}&page_size={{ pagination.page_size }}{{ qparam }}">Next &rsaquo;</a>
+      <a class="btn btn-secondary btn-sm" href="?page={{ pagination.total_pages }}&page_size={{ pagination.page_size }}{{ qparam }}" title="Last page">Last &raquo;</a>
       {% else %}
       <span class="btn btn-primary btn-sm" aria-disabled="true">Next &rsaquo;</span>
       <span class="btn btn-secondary btn-sm" aria-disabled="true">Last &raquo;</span>
@@ -159,12 +510,11 @@
     <div class="empty-icon">&#9636;</div>
     <div>No {{ department }} records yet.</div>
     <div class="small-text mt-4">
-      Records appear here once an administrator uploads a loan file and the
+      Records will appear once an administrator uploads a loan file and the
       Windmill pipeline finishes ingesting it.
     </div>
   </div>
   {% endif %}
 </section>
-
 {% endif %}
 {% endblock %}

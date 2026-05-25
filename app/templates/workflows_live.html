@@ -1,0 +1,63 @@
+{% extends "_layout.html" %}
+{% set active = 'workflows' %}
+
+{% block page_title %}Live Windmill dashboard{% endblock %}
+{% block crumbs %}Console &rsaquo; <a href="/workflows" class="link-strong">Workflows</a> &rsaquo; Live{% endblock %}
+
+{% block content %}
+<div class="live-page reveal-on-load">
+  <div class="live-page-toolbar">
+    <div>
+      <h1 class="section-title">
+        Loan Pipeline — Live
+        <span class="live-pill" title="Live"><span class="live-dot"></span>Live</span>
+      </h1>
+      <p class="section-subtitle">
+        Workspace <code class="mono">{{ windmill_workspace }}</code> &middot;
+        Flow <code class="mono">{{ windmill_workflow_path }}</code>
+      </p>
+    </div>
+    <div class="actions">
+      <a class="btn btn-secondary" href="/workflows">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        Back to overview
+      </a>
+      <a class="btn btn-secondary" href="{{ windmill_dashboard_url }}" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        Open in Windmill ↗
+      </a>
+      <button type="button" class="btn btn-primary" id="iframe-reload">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        Reload
+      </button>
+    </div>
+  </div>
+
+  <div class="iframe-wrap iframe-wrap-tall">
+    <iframe
+      id="windmill-frame"
+      src="{{ windmill_dashboard_url }}"
+      title="Windmill Loan Pipeline Dashboard"
+      referrerpolicy="no-referrer"
+      sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-downloads"
+    ></iframe>
+  </div>
+  <div class="iframe-fallback">
+    If the dashboard doesn't load above (some Windmill installs refuse to render
+    inside an iframe), use <strong>Open in Windmill ↗</strong>. Sign in to Windmill
+    once and this embed will work on subsequent visits.
+  </div>
+</div>
+
+<script>
+  (function () {
+    var btn = document.getElementById('iframe-reload');
+    var frame = document.getElementById('windmill-frame');
+    if (btn && frame) {
+      btn.addEventListener('click', function () {
+        frame.src = frame.src;
+      });
+    }
+  })();
+</script>
+{% endblock %}

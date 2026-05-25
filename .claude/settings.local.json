@@ -12,7 +12,29 @@
       "PowerShell(docker exec fastapi_windmill_postgres psql -U postgres -d loan_db -c \"SELECT id, department, email, updated_at FROM department_settings ORDER BY department;\")",
       "PowerShell(docker exec fastapi_windmill_postgres psql -U postgres -d loan_db -c \"UPDATE department_settings SET email='vipinjarwal.002@gmail.com' WHERE department='finance'; UPDATE department_settings SET email='vipin2009.jarwal@gmail.com' WHERE department='hr'; UPDATE department_settings SET email='hafov39959@codoteam.com' WHERE department='sales'; SELECT department, email, updated_at FROM department_settings ORDER BY department;\")",
       "Bash(git remote *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit -q -m ' *)",
+      "Bash(git branch *)",
+      "Bash(git checkout *)",
+      "Bash(git push *)",
+      "Bash(git fetch *)",
+      "Bash(python -m py_compile app/api/v1/routers/internal.py app/schemas/ingest.py)",
+      "Bash(docker exec *)",
+      "Bash(python -c \"import json,sys; d=json.load\\(open\\('windmill-app-dashboard.json',encoding='utf-8'\\)\\); print\\('OK',len\\(d['value']['grid']\\),'components,',len\\(d['value']['hiddenInlineScripts']\\),'scripts'\\)\")",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri 'http://localhost:8080/api/version' -UseBasicParsing -TimeoutSec 5; Write-Output \\(\"Windmill version: \" + $r.Content\\) } catch { Write-Output \\(\"Windmill not reachable: \" + $_.Exception.Message\\) })",
+      "PowerShell(.\\\\install-dashboard.ps1)",
+      "WebSearch",
+      "WebFetch(domain:gist.github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "PowerShell(python --version 2>&1)",
+      "PowerShell(python -c \"import json,hashlib,urllib.request; print\\('stdlib OK'\\)\")",
+      "PowerShell(Start-Process 'http://localhost:8080/apps/get/u/admin/loan_dashboard')",
+      "Bash(python -c \"import json; d=json.load\\(open\\('windmill-app-dashboard.json',encoding='utf-8'\\)\\); print\\('OK', len\\(d['value']['grid']\\),'components,', len\\(d['value']['hiddenInlineScripts']\\),'hidden scripts'\\)\")",
+      "PowerShell(docker exec windmill_worker getent hosts smtp.gmail.com 2>&1)",
+      "PowerShell(docker exec windmill_worker python3 -c \"import socket; s=socket.socket\\(socket.AF_INET\\); s.settimeout\\(5\\); s.connect\\(\\(socket.gethostbyname\\('smtp.gmail.com'\\), 587\\)\\); print\\('OK:', s.getpeername\\(\\)\\); s.close\\(\\)\" 2>&1)",
+      "PowerShell(docker exec windmill_worker python3 -c \"import socket; infos = socket.getaddrinfo\\('smtp.gmail.com', 587\\); [print\\(f.name, addr\\) for f, _, _, _, addr in [\\(a[0],\\)+a[1:] for a in infos]]\" 2>&1)",
+      "PowerShell(docker exec windmill_worker python3 -c \"import socket; s=socket.socket\\(\\); s.settimeout\\(5\\); s.connect\\(\\('142.250.80.46', 443\\)\\); print\\('OK reached 443'\\)\" 2>&1)",
+      "PowerShell(wsl -l -v 2>&1)"
     ]
   }
 }

@@ -25,9 +25,11 @@ class Settings(BaseSettings):
     allowed_upload_extensions: str = ".csv,.json,.txt,.pdf"
 
     windmill_base_url: str = "https://your-windmill-domain.com"
+    windmill_public_url: str = "http://localhost:8080"
     windmill_workspace: str = "prod"
     windmill_token: str = ""
     windmill_workflow_path: str = "u/admin/loan_pipeline"
+    windmill_dashboard_path: str = "u/admin/loan_dashboard"
     windmill_timeout_seconds: int = 20
     windmill_mock: bool = True
 

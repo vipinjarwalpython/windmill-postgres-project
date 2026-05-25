@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FastAPI Windmill RBAC</title>
+  <link rel="stylesheet" href="/static/css/styles.css" />
+</head>
+<body>
+  
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <span class="sidebar-logo-mark">L</span>
+      <span>Loan Pipeline</span>
+    </div>
+
+    <div class="sidebar-section-label">Workspace</div>
+    <a class="sidebar-link active" href="/dashboard">
+      <span class="dot"></span>
+      <span>Dashboard</span>
+    </a>
+    
+    <a class="sidebar-link" href="/docs" target="_blank" rel="noopener">
+      <span class="dot"></span>
+      <span>API Docs</span>
+    </a>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-user">
+        <div class="avatar">F</div>
+        <div class="sidebar-user-meta">
+          <div class="uname">finance_user</div>
+          <div class="role">Finance</div>
+        </div>
+      </div>
+      <form method="post" action="/logout" class="logout-form">
+        <button type="submit" class="logout-btn">Sign out</button>
+      </form>
+    </div>
+  </aside>
+
+  <section class="main">
+    <header class="topbar">
+      <div>
+        <div class="page-title">Welcome back, finance_user</div>
+        <div class="crumbs">Console &rsaquo; Dashboard</div>
+      </div>
+      <div>
+        <span class="badge badge-finance">Finance</span>
+      </div>
+    </header>
+
+    <div class="content">
+      
+<h1 class="section-title">Overview</h1>
+<p class="section-subtitle">
+  You are signed in as <strong>finance_user</strong>
+  (Finance). Your access scope below.
+</p>
+
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-label">Account</div>
+    <div class="stat-value">finance_user</div>
+    <div class="stat-foot">ID #2</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Role</div>
+    <div class="stat-value">Finance</div>
+    <div class="stat-foot">Determines which actions you can perform</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Scope</div>
+    <div class="stat-value">
+      Finance only
+      
+    </div>
+    <div class="stat-foot">RBAC-enforced on every request</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">
+      Records available
+    </div>
+    
+    <div class="stat-value">339</div>
+    <div class="stat-foot">Total rows ingested by the pipeline</div>
+    
+  </div>
+</div>
+
+
+
+<section class="card mt-6">
+  <div class="card-head">
+    <div>
+      <h2 class="card-title">Finance records</h2>
+      <p class="card-subtitle">
+        
+        Showing <strong>26&ndash;50</strong>
+        of <strong>339</strong> records ingested by the Windmill pipeline.
+        
+      </p>
+    </div>
+    <div class="card-head-right">
+      <form method="get" action="/dashboard" class="page-size-form">
+        <label for="page_size" class="small-text">Rows&nbsp;per&nbsp;page</label>
+        <select name="page_size" id="page_size" class="form-control form-control-sm" onchange="this.form.submit()">
+          
+          <option value="10" >10</option>
+          
+          <option value="25" selected>25</option>
+          
+          <option value="50" >50</option>
+          
+          <option value="100" >100</option>
+          
+        </select>
+        <input type="hidden" name="page" value="1" />
+      </form>
+      <span class="badge badge-finance">Finance</span>
+    </div>
+  </div>
+
+  
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Employee</th>
+          <th class="t-right">Amount</th>
+          <th>Record date</th>
+          <th>From upload</th>
+          <th>Ingested at</th>
+        </tr>
+      </thead>
+      <tbody>
+        
+        <tr>
+          <td class="mono">314</td>
+          <td>David Wilson</td>
+          <td class="mono t-right">69760.49</td>
+          <td class="small-text">2026-05-01</td>
+          <td class="mono small-text">#23</td>
+          <td class="small-text">2026-05-18 08:20:19</td>
+        </tr>
+        
+        <tr>
+          <td class="mono">313</td>
+          <td>Jack Taylor</td>
+          <td class="mono t-right">66037.27</td>
+          <td class="small-text">2026-10-28</td>
+          <td class="mono small-text">#23</td>
+          <td class="small-text">2026-05-18 08:20:19</td>
+        </tr>
+        
+        <tr>
+          <td class="mono">312</td>
+          <td>Alice Johnson</td>
+          <td class="mono t-right">62178.80</td>
+          <td class="small-text">2026-02-04</td>
+          <td class="mono small-text">#23</td>
+          <td class="small-text">2026-05-18 08:20:19</td>
+        </tr>
+        
+        <tr>
+          <td class="mono">311</td>
+          <td>Alice Johnson</td>
+          <td class="mono t-right">60802.43</td>
+          <td class="small-text">2026-08-28</td>
+          <td class="mono small-text">#23</td>
+          <td class="small-text">2026-05-18 08:20:19</td>
+        </tr>
+        
+        <tr>
+          <td class="mono">310</td>
+          <td>Grace Lee</td>
+          <td class="mono t-right">60258.05</td>
+          <td class="small-text">2026-05-28</td>
+          <td class="mono small-text">#23</td>
+          <td class="small-text">2026-05-18 08:20:19</td>
+        </tr>
+        
+        <tr>
+          <td class="mono">309</td>
+          <td>Grace Lee</td>
+          <td class="mono t-right">64125.72</td>
+          <td class="small-text">2026-05-06</td>
+          <td class="mono small-text">#23</td>
+          <td class="small-text">2026-05-18 08:20:19</td>
+        </tr>
+        
+        <tr>
+          <td class="mono">308</td>
+          <td>Grace Lee</td>
+          <td class="mono t-right">54667.54</td>
+          <td class="small-text">2026-07-26</td>
+          <td class="mono small-text">#23</td>
+          <td class="small-text">2026-05-18 08:20:19</td>
+        </tr>
+        
+        <tr>
+          <td class="mono">307</td>
+          <td>Alice Johnson</td>
+          <td class="mono t-right">52560.19</td>
+          <td class="small-text">2026-03-27</td>
+          <td class="mono small-text">#23</td>
+          <td class="small-text">2026-05-18 08:20:19</td>
+        </tr>
+        
+        <tr>
+          <td class="mono">306</td>
+          <td>Alice Johnson</td>
+          <td class="mono t-right">59020.10</td>
+          <td class="small-text">2026-06-24</td>
+          <td class="mono small-text">#23</td>
+          <td class="small-text">2026-05-18 08:20:19</td>
+        </tr>
+        
+        <tr>
+          <td class="mono">305</td>
+          <td>Peter Young</td>
+          <td class="mono t-right">63317.56</td>
+          <td class="small-text">2026-09-29</td>
+          <td class="mono small-text">#23</td>
+          <td class="small-text">2026-05-18 08:20:19</td>
+        </tr>
+        
+        <tr>
+          <td class="mono">304</td>
+          <td>Peter Young</td>
+          <td class="mono t-right">58652.63</td>
+          <td class="small-text">2026-03-02</td>
+          <td class="mono small-text">#23</td>
+          <td class="small-text">2026-05-18 08:20:19</td>
+        </tr>
+        
+        <tr>
+          <td class="mono">303</td>
+          <td>Grace Lee</td>
+          <td class="mono t-right">54083.90</td>
+          <td class="small-text">2026-05-24</td>
+          <td class="mono small-text">#23</td>
+          <td class="small-text">2026-05-18 08:20:19</td>
+        </tr>
+        
+        <tr>
+          <td class="mono">302</td>
+          <td>Mia Robinson</td>
+          <td class="mono t-right">55724.88</td>
+          <td class="small-text">2026-03-02</td>
+          <td class="mono small-text">#23</td>
+          <td class="small-text">2026-05-18 08:20:19</td>
+        </tr>
+        
+        <tr>
+          <td class="mono">301</td>
+          <td>Peter Young</td>
+          <td class="mono t-right">68118.85</td>
+          <td class="small-text">2026-02-02</td>
+          <td class="mono small-text">#23</td>
+          <td class="small-text">2026-05-18 08:20:19</td>
+        </tr>
+        
+        <tr>
+          <td class="mono">300</td>
+          <td>Peter Young</td>
+          <td class="mono t-right">57992.37</td>
+          <td class="small-text">2026-05-03</td>
+          <td class="mono small-text">#23</td>
+          <td class="small-text">2026-05-18 08:20:19</td>
+        </tr>
+        
+        <tr>
+          <td class="mono">299</td>
+          <td>Mia Robinson</td>
+          <td class="mono t-right">62229.47</td>
+          <td class="small-text">2026-11-12</td>
+          <td class="mono small-text">#23</td>
+          <td class="small-text">2026-05-18 08:20:19</td>
+        </tr>
+        
+        <tr>
+          <td class="mono">298</td>
+          <td>Alice Johnson</td>
+          <td class="mono t-right">67914.95</td>
+          <td class="small-text">2026-05-17</td>
+          <td class="mono small-text">#23</td>
+          <td class="small-text">2026-05-18 08:20:19</td>
+        </tr>
+        
+        <tr>
+          <td class="mono">297</td>
+          <td>Alice Johnson</td>
+          <td class="mono t-right">67764.47</td>
+          <td class="small-text">2026-01-21</td>
+          <td class="mono small-text">#23</td>
+          <td class="small-text">2026-05-18 08:20:19</td>
+        </tr>
+        
+        <tr>
+          <td class="mono">296</td>
+          <td>Peter Young</td>
+          <td class="mono t-right">66390.39</td>
+          <td class="small-text">2026-01-01</td>
+          <td class="mono small-text">#23</td>
+          <td class="small-text">2026-05-18 08:20:19</td>
+        </tr>
+        
+        <tr>
+          <td class="mono">295</td>
+          <td>Peter Young</td>
+          <td class="mono t-right">54200.32</td>
+          <td class="small-text">2026-02-07</td>
+          <td class="mono small-text">#23</td>
+          <td class="small-text">2026-05-18 08:20:19</td>
+        </tr>
+        
+        <tr>
+          <td class="mono">294</td>
+          <td>Mia Robinson</td>
+          <td class="mono t-right">68761.04</td>
+          <td class="small-text">2026-06-17</td>
+          <td class="mono small-text">#23</td>
+          <td class="small-text">2026-05-18 08:20:19</td>
+        </tr>
+        
+        <tr>
+          <td class="mono">293</td>
+          <td>Mia Robinson</td>
+          <td class="mono t-right">54301.46</td>
+          <td class="small-text">2026-01-09</td>
+          <td class="mono small-text">#23</td>
+          <td class="small-text">2026-05-18 08:20:19</td>
+        </tr>
+        
+        <tr>
+          <td class="mono">292</td>
+          <td>David Wilson</td>
+          <td class="mono t-right">64265.64</td>
+          <td class="small-text">2026-10-01</td>
+          <td class="mono small-text">#23</td>
+          <td class="small-text">2026-05-18 08:20:19</td>
+        </tr>
+        
+        <tr>
+          <td class="mono">291</td>
+          <td>Alice Johnson</td>
+          <td class="mono t-right">53297.08</td>
+          <td class="small-text">2026-03-19</td>
+          <td class="mono small-text">#23</td>
+          <td class="small-text">2026-05-18 08:20:19</td>
+        </tr>
+        
+        <tr>
+          <td class="mono">290</td>
+          <td>David Wilson</td>
+          <td class="mono t-right">56443.22</td>
+          <td class="small-text">2026-02-15</td>
+          <td class="mono small-text">#23</td>
+          <td class="small-text">2026-05-18 08:20:19</td>
+        </tr>
+        
+      </tbody>
+    </table>
+  </div>
+
+  <nav class="pager" aria-label="Pagination">
+    <span class="pager-info small-text">
+      Page <strong>2</strong> of <strong>14</strong>
+    </span>
+    <div class="pager-controls">
+      
+      <a class="btn btn-secondary btn-sm" href="?page=1&page_size=25" title="First page">&laquo; First</a>
+      <a class="btn btn-secondary btn-sm" href="?page=1&page_size=25">&lsaquo; Prev</a>
+      
+
+      
+      <a class="btn btn-primary btn-sm" href="?page=3&page_size=25">Next &rsaquo;</a>
+      <a class="btn btn-secondary btn-sm" href="?page=14&page_size=25" title="Last page">Last &raquo;</a>
+      
+    </div>
+  </nav>
+  
+</section>
+
+
+
+    </div>
+  </section>
+</div>
+
+</body>
+</html>

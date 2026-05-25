@@ -1,0 +1,170 @@
+{% extends "_layout.html" %}
+{% set active = 'dashboard' %}
+
+{% block page_title %}Welcome back, {{ user.username }}{% endblock %}
+{% block crumbs %}Console &rsaquo; Dashboard{% endblock %}
+
+{% block content %}
+<h1 class="section-title">Overview</h1>
+<p class="section-subtitle">
+  You are signed in as <strong>{{ user.username }}</strong>
+  ({{ role_label }}). Your access scope below.
+</p>
+
+<div class="stat-grid tilt-stage">
+  <div class="stat-card tilt-card reveal-on-load delay-1">
+    <div class="stat-label">Account</div>
+    <div class="stat-value">{{ user.username }}</div>
+    <div class="stat-foot">ID #{{ user.id }}</div>
+  </div>
+  <div class="stat-card tilt-card reveal-on-load delay-2">
+    <div class="stat-label">Role</div>
+    <div class="stat-value">{{ role_label }}</div>
+    <div class="stat-foot">Determines which actions you can perform</div>
+  </div>
+  <div class="stat-card tilt-card reveal-on-load delay-3">
+    <div class="stat-label">Scope</div>
+    <div class="stat-value">
+      {% if is_admin %}All departments
+      {% else %}{{ department|capitalize }} only
+      {% endif %}
+    </div>
+    <div class="stat-foot">RBAC-enforced on every request</div>
+  </div>
+  <div class="stat-card tilt-card reveal-on-load delay-4">
+    <div class="stat-label">
+      {% if is_admin %}Status{% else %}Records available{% endif %}
+    </div>
+    {% if is_admin %}
+    <div class="stat-value" style="color: var(--success)">Active</div>
+    <div class="stat-foot">Session expires automatically</div>
+    {% else %}
+    <div class="stat-value" data-count-target="{{ pagination.total if pagination else 0 }}">0</div>
+    <div class="stat-foot">Total rows ingested by the pipeline</div>
+    {% endif %}
+  </div>
+</div>
+
+{% if is_admin %}
+<h2 class="section-title mt-6">Actions available to you</h2>
+<p class="section-subtitle">Cards reflect your role permissions.</p>
+
+<div class="action-grid tilt-stage">
+  <a href="/uploads" class="action-card tilt-card reveal-on-load delay-1">
+    <div class="icon">U</div>
+    <h3>Upload Loan File</h3>
+    <p>Submit a new CSV to trigger the Windmill ingestion pipeline and notify departments.</p>
+    <div class="meta"><span class="role-pill">Admin only</span></div>
+    <div class="cta">Go to uploads &rsaquo;</div>
+  </a>
+
+  <a href="/workflows" class="action-card tilt-card reveal-on-load delay-2">
+    <div class="icon">W</div>
+    <h3>Windmill Workflows</h3>
+    <p>Open the live pipeline dashboard &mdash; run history, step status, and logs in real time.</p>
+    <div class="meta"><span class="role-pill">Admin only</span></div>
+    <div class="cta">Open workflows &rsaquo;</div>
+  </a>
+
+  <a href="/docs" target="_blank" rel="noopener" class="action-card tilt-card reveal-on-load delay-3">
+    <div class="icon">A</div>
+    <h3>API Documentation</h3>
+    <p>Browse the OpenAPI reference for upload, ingest and data endpoints.</p>
+    <div class="meta"><span class="role-pill">All roles</span></div>
+    <div class="cta">Open API docs &rsaquo;</div>
+  </a>
+</div>
+
+{% else %}
+
+<section class="card mt-6 reveal-on-load delay-3">
+  <div class="card-head">
+    <div>
+      <h2 class="card-title">{{ department|capitalize }} records</h2>
+      <p class="card-subtitle">
+        {% if pagination and pagination.total %}
+        Showing <strong>{{ pagination.first_index }}&ndash;{{ pagination.last_index }}</strong>
+        of <strong>{{ pagination.total }}</strong> records ingested by the Windmill pipeline.
+        {% else %}
+        Rows allocated to your department by the Windmill pipeline.
+        {% endif %}
+      </p>
+    </div>
+    <div class="card-head-right">
+      <form method="get" action="/dashboard" class="page-size-form">
+        <label for="page_size" class="small-text">Rows&nbsp;per&nbsp;page</label>
+        <select name="page_size" id="page_size" class="form-control form-control-sm" onchange="this.form.submit()">
+          {% for size in pagination.size_choices %}
+          <option value="{{ size }}" {% if size == pagination.page_size %}selected{% endif %}>{{ size }}</option>
+          {% endfor %}
+        </select>
+        <input type="hidden" name="page" value="1" />
+      </form>
+      <span class="badge {{ role_badge_class }}">{{ role_label }}</span>
+    </div>
+  </div>
+
+  {% if department_rows %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Employee</th>
+          <th class="t-right">Amount</th>
+          <th>Record date</th>
+          <th>From upload</th>
+          <th>Ingested at</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in department_rows %}
+        <tr>
+          <td class="mono">{{ row.id }}</td>
+          <td>{{ row.employee_name }}</td>
+          <td class="mono t-right">{{ "%.2f"|format(row.amount) }}</td>
+          <td class="small-text">{{ row.record_date.strftime('%Y-%m-%d') }}</td>
+          <td class="mono small-text">#{{ row.source_upload_id }}</td>
+          <td class="small-text">{{ row.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <nav class="pager" aria-label="Pagination">
+    <span class="pager-info small-text">
+      Page <strong>{{ pagination.page }}</strong> of <strong>{{ pagination.total_pages }}</strong>
+    </span>
+    <div class="pager-controls">
+      {% if pagination.has_prev %}
+      <a class="btn btn-secondary btn-sm" href="?page=1&page_size={{ pagination.page_size }}" title="First page">&laquo; First</a>
+      <a class="btn btn-secondary btn-sm" href="?page={{ pagination.prev_page }}&page_size={{ pagination.page_size }}">&lsaquo; Prev</a>
+      {% else %}
+      <span class="btn btn-secondary btn-sm" aria-disabled="true">&laquo; First</span>
+      <span class="btn btn-secondary btn-sm" aria-disabled="true">&lsaquo; Prev</span>
+      {% endif %}
+
+      {% if pagination.has_next %}
+      <a class="btn btn-primary btn-sm" href="?page={{ pagination.next_page }}&page_size={{ pagination.page_size }}">Next &rsaquo;</a>
+      <a class="btn btn-secondary btn-sm" href="?page={{ pagination.total_pages }}&page_size={{ pagination.page_size }}" title="Last page">Last &raquo;</a>
+      {% else %}
+      <span class="btn btn-primary btn-sm" aria-disabled="true">Next &rsaquo;</span>
+      <span class="btn btn-secondary btn-sm" aria-disabled="true">Last &raquo;</span>
+      {% endif %}
+    </div>
+  </nav>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">&#9636;</div>
+    <div>No {{ department }} records yet.</div>
+    <div class="small-text mt-4">
+      Records appear here once an administrator uploads a loan file and the
+      Windmill pipeline finishes ingesting it.
+    </div>
+  </div>
+  {% endif %}
+</section>
+
+{% endif %}
+{% endblock %}

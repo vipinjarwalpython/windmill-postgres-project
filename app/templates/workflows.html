@@ -1,0 +1,39 @@
+{% extends "_layout.html" %}
+{% set active = 'workflows' %}
+
+{% block page_title %}Windmill Workflows{% endblock %}
+{% block crumbs %}Console &rsaquo; Workflows{% endblock %}
+
+{% block content %}
+<div class="workflow-toolbar reveal-on-load delay-1">
+  <div class="left">
+    <h1 class="section-title">
+      Loan Pipeline Dashboard
+      <span class="live-pill" title="Live"><span class="live-dot"></span>Live</span>
+    </h1>
+    <p class="section-subtitle">Live view of the Windmill flow &mdash; refreshes every few seconds.</p>
+  </div>
+  <div class="actions">
+    <a class="btn btn-secondary" href="{{ windmill_flow_url }}" target="_blank" rel="noopener">
+      View runs &rsaquo;
+    </a>
+    <a class="btn btn-primary" href="{{ windmill_dashboard_url }}" target="_blank" rel="noopener">
+      Open in Windmill &rsaquo;
+    </a>
+  </div>
+</div>
+
+<div class="iframe-wrap reveal-on-load delay-2">
+  <iframe
+    src="{{ windmill_dashboard_url }}"
+    title="Windmill Loan Pipeline Dashboard"
+    referrerpolicy="no-referrer"
+    sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-downloads"
+  ></iframe>
+</div>
+<div class="iframe-fallback reveal-on-load delay-3">
+  If the dashboard does not load above (Windmill may refuse to render inside an iframe),
+  use <strong>Open in Windmill</strong>. Sign in to Windmill once and this page will
+  display the live dashboard on subsequent visits.
+</div>
+{% endblock %}

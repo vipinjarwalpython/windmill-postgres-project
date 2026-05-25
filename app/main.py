@@ -1,7 +1,9 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.v1.router import api_router
 from app.core.config import get_settings
@@ -10,6 +12,8 @@ from app.db.seed import seed_demo_users, seed_department_settings
 from app.db.session import create_database_schema
 from app.middleware.exception_handler import register_exception_handlers
 from app.middleware.request_id import RequestIdMiddleware
+from app.web.dependencies import RedirectToLogin
+from app.web.router import router as web_router
 
 
 settings = get_settings()
@@ -41,11 +45,20 @@ app.add_middleware(
 )
 register_exception_handlers(app)
 
+
+@app.exception_handler(RedirectToLogin)
+async def redirect_to_login_handler(request: Request, exc: RedirectToLogin):
+    return RedirectResponse(url="/login", status_code=302)
+
+
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
 app.include_router(api_router)
+app.include_router(web_router)
 
 
-@app.get("/", tags=["root"])
-async def root():
+@app.get("/api", tags=["root"], include_in_schema=False)
+async def api_root():
     return {
         "message": "FastAPI Windmill RBAC API is running",
         "docs": "/docs",

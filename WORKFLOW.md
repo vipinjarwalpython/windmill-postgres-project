@@ -248,3 +248,83 @@ docker exec fastapi_windmill_postgres psql -U postgres -d loan_db -c `
 Invoke-RestMethod -Uri http://localhost:8000/api/v1/data/me -Method Get `
   -Headers @{ Authorization = "Bearer $token" }
 ```
+
+---
+
+## 12. Live dashboard (Windmill App)
+
+[windmill-app-dashboard.json](windmill-app-dashboard.json) is a ready-to-import Windmill App
+that gives you a live view of the pipeline: stats cards, sortable runs table, per-job
+detail panel with step badges, and a colourised log stream — all auto-refreshing.
+
+**Layout:**
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│ Loan Pipeline Dashboard                  Flow: u/admin/loan_… │  header
+├─────────────┬─────────────┬─────────────┬─────────────────────┤
+│ Total runs  │  Running    │  Succeeded  │  Failed             │  stat cards
+│     42      │      1      │     38      │      3              │
+├─────────────┴─────────────┴─────────────┴─────────────────────┤
+│ [Refresh now]   Last updated: …  · Auto-refresh every 5s      │  controls
+├─────────────────────────────────────────────────────────────────┤
+│ Started ▼  │ Job ID  │ User    │ Status   │ Dur  │ Upload    │
+│ 12:04:11   │ a1b2c3… │ admin   │ Running  │ 3.1s │ loans.csv │  jobs_table
+│ 11:58:02   │ 8e9f… │ admin   │ Success  │ 4.7s │ q3.csv    │
+│ …                                                             │
+├──────────────────────┬──────────────────────────────────────────┤
+│ Selected job         │ Flow logs            <uuid>… get_flow_… │
+│  <uuid>              │ INFO  Started flow                       │  detail +
+│  Started: 12:04:11   │ INFO  process_upload OK                  │  logs panel
+│  Duration: 3.12s     │ INFO  email sent (finance)               │
+│  Upload: loans.csv   │ WARN  retry hr SMTP                      │
+│  Steps:              │ ERROR no rows for sales                  │
+│   • process_upload ✓ │ INFO  ingest OK (12 rows)                │
+│   • split_rows  ▶    │ …                                        │
+│  [Open in Windmill ↗]│                                          │
+└──────────────────────┴──────────────────────────────────────────┘
+```
+
+**Install (one command):**
+
+```powershell
+.\install-dashboard.ps1
+```
+
+[install-dashboard.ps1](install-dashboard.ps1) reads `WINDMILL_PUBLIC_URL`,
+`WINDMILL_WORKSPACE`, and `WINDMILL_TOKEN` from `.env`, transforms the UI-import JSON
+to the REST API shape (lifts `policy` to top level), and `POST`s
+`/api/w/{ws}/apps/create` — or `/apps/update/{path}` if the app already exists.
+After it prints `Created.` the dashboard is live at
+`http://localhost:8080/apps/get/u/admin/loan_dashboard`.
+
+Override anything via parameters:
+
+```powershell
+.\install-dashboard.ps1 -Workspace loan -Path u/admin/loan_dashboard `
+                        -BaseUrl http://localhost:8080 -Token "$env:WM_TOKEN"
+```
+
+(Manual alternative: open Windmill → **Apps → +New → Import from JSON** → paste
+[windmill-app-dashboard.json](windmill-app-dashboard.json).)
+
+No extra config — the three background scripts use the per-run `WM_TOKEN`,
+`WM_WORKSPACE`, and `BASE_INTERNAL_URL` env vars Windmill injects automatically.
+
+**How it stays live:**
+
+| Script | Triggers | Data |
+|---|---|---|
+| `bg_jobs` | auto-refresh every 5s | `GET /jobs/list?script_path_exact=u/admin/loan_pipeline` → rows + stats HTML |
+| `bg_job_detail` | row click in `jobs_table` | `GET /jobs_u/get/{id}` → status, step badges, "Open in Windmill" link |
+| `bg_logs` | row click + auto-refresh | `GET /jobs_u/get_flow_all_logs/{id}` (falls back to `get_logs`) → colourised stream |
+
+**Customising:**
+
+- Change the flow path: edit `FLOW_PATH` at the top of the `bg_jobs` script in the app
+  editor. (The app filters runs by `script_path_exact`.)
+- Change refresh cadence: each background script has an **Auto-refresh** dropdown in the
+  app editor (currently *On* — Windmill picks the interval). Toggle off for static view.
+- Surface FastAPI's `file_uploads` table too: add a 4th background script doing
+  `fetch('http://api:8000/api/v1/uploads/...')` (requires a JWT — store as a Windmill
+  variable/resource and read with `wmill.getResource`).

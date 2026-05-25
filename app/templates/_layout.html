@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block body %}
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <span class="sidebar-logo-mark">L</span>
+      <span>Loan Pipeline</span>
+    </div>
+
+    <div class="sidebar-section-label">Workspace</div>
+    <a class="sidebar-link {% if active == 'dashboard' %}active{% endif %}" href="/dashboard">
+      <span class="dot"></span>
+      <span>Dashboard</span>
+    </a>
+    {% if user.role.value == 'admin' %}
+    <a class="sidebar-link {% if active == 'uploads' %}active{% endif %}" href="/uploads">
+      <span class="dot"></span>
+      <span>Uploads</span>
+    </a>
+    <a class="sidebar-link {% if active == 'workflows' %}active{% endif %}" href="/workflows">
+      <span class="dot"></span>
+      <span>Workflows</span>
+    </a>
+    {% endif %}
+    <a class="sidebar-link" href="/docs" target="_blank" rel="noopener">
+      <span class="dot"></span>
+      <span>API Docs</span>
+    </a>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-user">
+        <div class="avatar">{{ user.username[0]|upper }}</div>
+        <div class="sidebar-user-meta">
+          <div class="uname">{{ user.username }}</div>
+          <div class="role">{{ role_label }}</div>
+        </div>
+      </div>
+      <form method="post" action="/logout" class="logout-form">
+        <button type="submit" class="logout-btn">Sign out</button>
+      </form>
+    </div>
+  </aside>
+
+  <section class="main">
+    <header class="topbar">
+      <div>
+        <div class="page-title">{% block page_title %}{% endblock %}</div>
+        <div class="crumbs">{% block crumbs %}{% endblock %}</div>
+      </div>
+      <div>
+        <span class="badge {{ role_badge_class }}">{{ role_label }}</span>
+      </div>
+    </header>
+
+    <div class="content">
+      {% block content %}{% endblock %}
+    </div>
+  </section>
+</div>
+{% endblock %}

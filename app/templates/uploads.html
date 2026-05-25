@@ -1,0 +1,165 @@
+{% extends "_layout.html" %}
+{% set active = 'uploads' %}
+
+{% block page_title %}Upload Loan File{% endblock %}
+{% block crumbs %}Console &rsaquo; Uploads{% endblock %}
+
+{% block content %}
+<div class="upload-grid">
+  <section class="card reveal-on-load delay-1">
+    <h2 class="card-title">New upload</h2>
+    <p class="card-subtitle">
+      Submit a loan file to trigger the Windmill ingestion pipeline.
+      Allowed: <strong>{{ allowed_extensions|join(", ") }}</strong> &middot;
+      Max size: <strong>{{ max_upload_mb }} MB</strong>.
+    </p>
+
+    {% if success %}
+    <div class="alert alert-success">
+      <strong>Uploaded.</strong>
+      <span><code>{{ success.filename }}</code> stored as upload #{{ success.upload_id }}.</span>
+      {% if success.job_id %}
+      <span class="alert-detail">Windmill job: <code>{{ success.job_id }}</code> &middot; status: <strong>{{ success.status }}</strong></span>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if error %}
+    <div class="alert alert-error">
+      <strong>Upload failed.</strong>
+      <span>{{ error }}</span>
+    </div>
+    {% endif %}
+
+    <form method="post" action="/uploads" enctype="multipart/form-data" id="upload-form">
+      <label for="file-input" class="dropzone" id="dropzone">
+        <div class="dropzone-icon">&#8682;</div>
+        <div class="dropzone-title">Drop a file here or <span class="link-strong">browse</span></div>
+        <div class="dropzone-hint" id="dropzone-hint">No file selected</div>
+        <input
+          type="file"
+          id="file-input"
+          name="file"
+          required
+          accept="{{ allowed_extensions|join(',') }}"
+          hidden
+        />
+      </label>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary" id="upload-btn">
+          <span class="btn-label">Upload &amp; trigger workflow</span>
+        </button>
+        <a href="/dashboard" class="btn btn-secondary">Cancel</a>
+      </div>
+    </form>
+  </section>
+
+  <aside class="card card-info reveal-on-load delay-2">
+    <h3 class="card-title">What happens next</h3>
+    <ol class="step-list">
+      <li><strong>Store</strong> &mdash; file is written to shared storage and an audit log is recorded.</li>
+      <li><strong>Trigger</strong> &mdash; the Windmill <code>loan_pipeline</code> flow is started.</li>
+      <li><strong>Split &amp; notify</strong> &mdash; rows are split by department and emails are sent.</li>
+      <li><strong>Ingest</strong> &mdash; processed rows are inserted into <code>finance_data</code> / <code>hr_data</code> / <code>sales_data</code>.</li>
+    </ol>
+    <p class="card-subtitle mt-4">
+      Monitor live progress on the <a href="/workflows" class="link-strong">Workflows</a> page.
+    </p>
+  </aside>
+</div>
+
+<section class="card mt-6 reveal-on-load delay-3">
+  <div class="card-head">
+    <div>
+      <h2 class="card-title">Recent uploads</h2>
+      <p class="card-subtitle">Last {{ uploads|length }} uploads across all administrators.</p>
+    </div>
+    <a href="/workflows" class="btn btn-secondary btn-sm">View workflow runs &rsaquo;</a>
+  </div>
+
+  {% if uploads %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Filename</th>
+          <th>Size</th>
+          <th>Status</th>
+          <th>Windmill job</th>
+          <th>Uploaded</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in uploads %}
+        <tr>
+          <td class="mono">{{ u.id }}</td>
+          <td>{{ u.original_filename }}</td>
+          <td class="mono">{{ format_size(u.size_bytes) }}</td>
+          <td>
+            <span class="badge {{ status_badge_class(u.status.value) }}">{{ u.status.value }}</span>
+          </td>
+          <td class="mono small-text">{{ u.windmill_job_id or '&mdash;'|safe }}</td>
+          <td class="small-text">{{ u.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">&#9636;</div>
+    <div>No uploads yet. Submit your first loan file above.</div>
+  </div>
+  {% endif %}
+</section>
+
+<script>
+  (function () {
+    const input = document.getElementById('file-input');
+    const hint = document.getElementById('dropzone-hint');
+    const dropzone = document.getElementById('dropzone');
+    const form = document.getElementById('upload-form');
+    const btn = document.getElementById('upload-btn');
+    const btnLabel = btn.querySelector('.btn-label');
+
+    function updateHint() {
+      if (input.files && input.files[0]) {
+        const f = input.files[0];
+        hint.textContent = f.name + ' (' + Math.round(f.size / 1024) + ' KB)';
+        dropzone.classList.add('has-file');
+      } else {
+        hint.textContent = 'No file selected';
+        dropzone.classList.remove('has-file');
+      }
+    }
+
+    input.addEventListener('change', updateHint);
+
+    ['dragenter', 'dragover'].forEach(function (evt) {
+      dropzone.addEventListener(evt, function (e) {
+        e.preventDefault();
+        dropzone.classList.add('drag-over');
+      });
+    });
+    ['dragleave', 'drop'].forEach(function (evt) {
+      dropzone.addEventListener(evt, function (e) {
+        e.preventDefault();
+        dropzone.classList.remove('drag-over');
+      });
+    });
+    dropzone.addEventListener('drop', function (e) {
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+        input.files = e.dataTransfer.files;
+        updateHint();
+      }
+    });
+
+    form.addEventListener('submit', function () {
+      btn.disabled = true;
+      btnLabel.textContent = 'Uploading…';
+    });
+  })();
+</script>
+{% endblock %}

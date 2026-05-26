@@ -15,6 +15,7 @@ from app.models.file_upload import FileUpload, UploadStatus
 from app.models.user import User
 from app.services.audit_service import AuditService
 from app.services.email_service import EmailService
+from app.services.loan_csv_validator import LoanCsvError, validate_loan_csv
 from app.services.windmill_service import WindmillService
 
 
@@ -50,6 +51,32 @@ class UploadService:
         storage_path = storage_dir / stored_name
 
         size = await self._write_file_with_limit(file, storage_path)
+
+        # Content validation — confirm the file is actually a loan CSV before
+        # we commit it to the DB or trigger Windmill. Failures here clean up
+        # the on-disk file so we don't leak rejected uploads.
+        try:
+            validate_loan_csv(storage_path, allowed_extensions)
+        except LoanCsvError as exc:
+            storage_path.unlink(missing_ok=True)
+            logger.info(
+                "upload_rejected_invalid_content",
+                extra={
+                    "uploaded_filename": original_name,
+                    "reason": exc.detail,
+                    "actor_id": current_user.id,
+                },
+            )
+            await self.audit.record(
+                action="file.rejected",
+                resource_type="file_upload",
+                actor_id=current_user.id,
+                resource_id=None,
+                detail=f"Rejected {original_name}: {exc.detail}",
+            )
+            await self.session.commit()
+            raise
+
         upload = FileUpload(
             original_filename=original_name,
             stored_filename=stored_name,

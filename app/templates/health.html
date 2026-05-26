@@ -1,0 +1,183 @@
+{% extends "_layout.html" %}
+{% set active = 'health' %}
+
+{% block page_title %}System health{% endblock %}
+{% block crumbs %}Console &rsaquo; Health{% endblock %}
+
+{% block content %}
+<div class="page-header reveal-on-load">
+  <div>
+    <h1 class="section-title">
+      System health
+      {% if overall_ok and not overall_warn %}
+      <span class="run-status run-status-passed" style="margin-left:8px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> All systems operational</span>
+      {% elif overall_ok %}
+      <span class="run-status run-status-running" style="margin-left:8px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> Operational with warnings</span>
+      {% else %}
+      <span class="run-status run-status-failed" style="margin-left:8px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Issue detected</span>
+      {% endif %}
+    </h1>
+    <p class="section-subtitle">
+      Live status of every dependency — API process, database, Windmill, SMTP and disk.
+      Page polls every 6 seconds.
+    </p>
+  </div>
+  <div style="display:flex; gap:8px; align-items:center;">
+    <button type="button" class="btn btn-secondary btn-sm" onclick="location.reload()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      Refresh
+    </button>
+    <span class="badge {{ role_badge_class }}">{{ role_label }}</span>
+  </div>
+</div>
+
+<meta http-equiv="refresh" content="6">
+
+{# ---- Status cards row ---- #}
+<div class="kpi-grid">
+  {% for check in checks %}
+  <div class="kpi reveal-on-load delay-{{ loop.index }}" style="padding-bottom:14px;">
+    <div class="kpi-head">
+      <div class="kpi-label">{{ check.label }}</div>
+      <span class="health-dot {% if check.ok and not check.warn %}is-ok{% elif check.warn %}is-warn{% else %}is-fail{% endif %}" aria-hidden="true"></span>
+    </div>
+    <div class="kpi-value" style="font-size:15px; line-height:1.25; font-weight:700; letter-spacing:-0.005em;">
+      {{ check.title }}
+    </div>
+    <div class="kpi-foot" style="font-size:11.5px; color:var(--text-muted); margin-top:6px; line-height:1.4; display:block;">
+      {{ check.detail }}
+      {% if check.hint %}
+      <div style="margin-top:6px; font-style:italic; color:var(--text-soft);">
+        <strong>Hint:</strong> {{ check.hint }}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{# ---- Environment summary ---- #}
+<section class="card reveal-on-load delay-3">
+  <div class="card-head">
+    <div>
+      <h2 class="card-title">Effective configuration</h2>
+      <p class="card-subtitle">Values read from <code class="mono">.env</code> at container start. Re-create the API container after editing.</p>
+    </div>
+  </div>
+  <div class="smtp-config">
+    <div class="smtp-row is-set">
+      <span class="smtp-key"><span class="smtp-dot"></span><span class="smtp-name">ENVIRONMENT</span></span>
+      <span class="smtp-val mono">{{ settings_summary.environment }}</span>
+      <span class="smtp-status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+    </div>
+    <div class="smtp-row is-set">
+      <span class="smtp-key"><span class="smtp-dot"></span><span class="smtp-name">WINDMILL_BASE_URL</span></span>
+      <span class="smtp-val mono">{{ settings_summary.windmill_base_url }}</span>
+      <span class="smtp-status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+    </div>
+    <div class="smtp-row is-set">
+      <span class="smtp-key"><span class="smtp-dot"></span><span class="smtp-name">WINDMILL_WORKSPACE</span></span>
+      <span class="smtp-val mono">{{ settings_summary.windmill_workspace }}</span>
+      <span class="smtp-status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+    </div>
+    <div class="smtp-row is-set">
+      <span class="smtp-key"><span class="smtp-dot"></span><span class="smtp-name">WINDMILL_WORKFLOW_PATH</span></span>
+      <span class="smtp-val mono">{{ settings_summary.windmill_workflow_path }}</span>
+      <span class="smtp-status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+    </div>
+    <div class="smtp-row is-set">
+      <span class="smtp-key"><span class="smtp-dot"></span><span class="smtp-name">INGEST_CALLBACK_URL</span></span>
+      <span class="smtp-val mono">{{ settings_summary.ingest_callback_url }}</span>
+      <span class="smtp-status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+    </div>
+    <div class="smtp-row is-set">
+      <span class="smtp-key"><span class="smtp-dot"></span><span class="smtp-name">ALLOWED_UPLOAD_EXTENSIONS</span></span>
+      <span class="smtp-val mono">{{ settings_summary.allowed_upload_extensions|join(', ') }}</span>
+      <span class="smtp-status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+    </div>
+    <div class="smtp-row is-set">
+      <span class="smtp-key"><span class="smtp-dot"></span><span class="smtp-name">MAX_UPLOAD_MB</span></span>
+      <span class="smtp-val mono">{{ settings_summary.max_upload_mb }} MB</span>
+      <span class="smtp-status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+    </div>
+  </div>
+</section>
+
+{# ---- Recent failures from audit log ---- #}
+<section class="card reveal-on-load delay-4">
+  <div class="card-head">
+    <div>
+      <h2 class="card-title">Recent failures</h2>
+      <p class="card-subtitle">Last 10 audit events with a failure / rejection action.</p>
+    </div>
+    <a href="/activity?action=workflow" class="btn btn-secondary btn-sm">Open activity &rsaquo;</a>
+  </div>
+  {% if failures %}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Action</th>
+          <th>Resource</th>
+          <th>Detail</th>
+          <th class="t-right">When</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in failures %}
+        <tr>
+          <td class="mono">{{ f.id }}</td>
+          <td>
+            <span class="activity-dot fail" style="display:inline-block;margin-right:8px;vertical-align:middle;"></span>
+            <strong>{{ f.action }}</strong>
+          </td>
+          <td class="mono small-text">{{ f.resource_type }}{% if f.resource_id %} <span class="text-muted">#{{ f.resource_id }}</span>{% endif %}</td>
+          <td class="small-text">{{ (f.detail or '')|truncate(120) }}</td>
+          <td class="small-text t-right">{{ f.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">&#9636;</div>
+    <div>No recorded failures.</div>
+    <div class="small-text mt-4">Workflow errors, SMTP send failures, and rejected uploads will appear here.</div>
+  </div>
+  {% endif %}
+</section>
+
+{# ---- Raw probe links ---- #}
+<section class="card reveal-on-load delay-4">
+  <div class="card-head">
+    <div>
+      <h2 class="card-title">Raw probes</h2>
+      <p class="card-subtitle">Direct JSON endpoints for external monitors (curl-friendly).</p>
+    </div>
+  </div>
+  <div class="legend-grid">
+    <div class="legend-item phase-passed">
+      <span class="legend-dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
+      <div>
+        <strong>Liveness</strong>
+        <div class="small-text">
+          <a href="/api/v1/health/live" target="_blank" rel="noopener" class="link-strong"><code class="mono">GET /api/v1/health/live</code> ↗</a>
+          — returns <code class="mono">{"status":"ok"}</code> if the process is running.
+        </div>
+      </div>
+    </div>
+    <div class="legend-item phase-running">
+      <span class="legend-dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 11v6c0 1.66 4.03 3 9 3s9-1.34 9-3v-6"/></svg></span>
+      <div>
+        <strong>Readiness</strong>
+        <div class="small-text">
+          <a href="/api/v1/health/ready" target="_blank" rel="noopener" class="link-strong"><code class="mono">GET /api/v1/health/ready</code> ↗</a>
+          — verifies the database is reachable with a <code class="mono">SELECT 1</code>.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

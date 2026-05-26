@@ -1669,6 +1669,54 @@ img, svg, canvas { display: block; max-width: 100%; }
 }
 .step-list strong { color: var(--text-strong); }
 
+/* ---------- CSV schema note (uploads page) ---------- */
+.csv-schema-note {
+  margin: 0 0 14px;
+  padding: 14px 16px;
+  border-radius: var(--r-md);
+  background:
+    linear-gradient(180deg, var(--brand-50) 0%, #ffffff 100%);
+  border: 1px solid var(--brand-200);
+  position: relative;
+}
+.csv-schema-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--brand-700);
+  font-size: 12.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.csv-schema-head svg { width: 16px; height: 16px; }
+.csv-schema-desc {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: var(--text-soft);
+  line-height: 1.5;
+}
+.csv-schema-cols {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.schema-col {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--brand-200);
+  color: var(--brand-800);
+  font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow: var(--sh-xs);
+}
+
 /* ---------- Workflows / iframe page ---------- */
 .workflow-toolbar {
   display: flex;
@@ -2195,6 +2243,20 @@ img, svg, canvas { display: block; max-width: 100%; }
     to   { background-position: 0 150%; }
   }
 }
+
+/* ====================================================================
+   HEALTH PAGE — status dot on KPI cards
+   ==================================================================== */
+.health-dot {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+  position: relative;
+  flex-shrink: 0;
+}
+.health-dot.is-ok   { background: var(--success); box-shadow: 0 0 0 4px var(--success-bg); }
+.health-dot.is-warn { background: var(--warning); box-shadow: 0 0 0 4px var(--warning-bg); }
+.health-dot.is-fail { background: var(--danger);  box-shadow: 0 0 0 4px var(--danger-bg);  animation: pulse 1.6s ease-in-out infinite; }
 
 /* ====================================================================
    SMTP DIAGNOSTICS PAGE

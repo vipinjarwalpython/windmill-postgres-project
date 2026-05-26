@@ -1088,6 +1088,179 @@ async def smtp_test_send(
     )
 
 
+# ------------------------------------------------------------------
+# /health — admin health & diagnostics page (in-app, no JSON redirect)
+# ------------------------------------------------------------------
+async def _check_database(session: AsyncSession) -> dict:
+    import time
+    started = time.perf_counter()
+    try:
+        await session.execute(select(func.count(User.id)))
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        return {
+            "ok": True,
+            "title": "Database reachable",
+            "detail": f"SELECT round-trip in {latency_ms} ms.",
+            "latency_ms": latency_ms,
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "title": "Database unreachable",
+            "detail": str(exc),
+            "hint": "Is the postgres container running? (`docker compose ps`)",
+        }
+
+
+async def _check_windmill(settings: Settings) -> dict:
+    import time, httpx
+    if settings.windmill_mock:
+        return {
+            "ok": True,
+            "warn": True,
+            "title": "Mock mode is on",
+            "detail": "Windmill triggers return fake job IDs — no real flow runs.",
+            "hint": "Set WINDMILL_MOCK=false and recreate the api container to use real Windmill.",
+        }
+    if not settings.windmill_token or settings.windmill_token.startswith("replace-"):
+        return {
+            "ok": False,
+            "title": "Windmill token missing",
+            "detail": "WINDMILL_TOKEN env var is empty or unset.",
+            "hint": "Create a token in Windmill UI → Account → Tokens, paste into .env.",
+        }
+    url = f"{settings.windmill_base_url.rstrip('/')}/api/version"
+    started = time.perf_counter()
+    try:
+        async with httpx.AsyncClient(timeout=4.0) as client:
+            resp = await client.get(url, headers={"Authorization": f"Bearer {settings.windmill_token}"})
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        if resp.status_code == 200:
+            version = (resp.text or "").strip().strip('"')[:40]
+            return {
+                "ok": True,
+                "title": "Windmill reachable",
+                "detail": f"{settings.windmill_base_url} responded in {latency_ms} ms · v{version or 'unknown'}.",
+            }
+        return {
+            "ok": False,
+            "title": f"Windmill HTTP {resp.status_code}",
+            "detail": (resp.text or "")[:200],
+            "hint": "Check WINDMILL_BASE_URL and that the token is still valid.",
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "title": "Could not reach Windmill",
+            "detail": str(exc),
+            "hint": f"From the api container, can it resolve {settings.windmill_base_url}?",
+        }
+
+
+def _check_smtp(settings: Settings) -> dict:
+    smtp = SmtpService(settings)
+    if smtp.is_configured():
+        return {
+            "ok": True,
+            "title": "SMTP configured",
+            "detail": f"{settings.smtp_host}:{settings.smtp_port} as {settings.smtp_username}.",
+            "hint": "Test the live connection on the SMTP page.",
+        }
+    return {
+        "ok": False,
+        "warn": True,
+        "title": "SMTP not fully configured",
+        "detail": "One or more SMTP_* env vars are empty — department notifications will be skipped.",
+        "hint": "Fill SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM in .env.",
+    }
+
+
+def _check_storage(settings: Settings) -> dict:
+    import shutil
+    from pathlib import Path
+    storage = Path(settings.storage_dir)
+    if not storage.exists():
+        return {
+            "ok": False,
+            "title": "Upload storage directory missing",
+            "detail": f"{storage} does not exist.",
+        }
+    try:
+        usage = shutil.disk_usage(storage)
+        free_pct = round(usage.free / usage.total * 100, 1)
+        used_gb = (usage.total - usage.free) / (1024 ** 3)
+        total_gb = usage.total / (1024 ** 3)
+        file_count = sum(1 for _ in storage.iterdir())
+        ok = free_pct >= 10
+        return {
+            "ok": ok,
+            "warn": not ok,
+            "title": f"Storage {free_pct}% free",
+            "detail": f"{used_gb:.2f} / {total_gb:.2f} GB used at {storage} · {file_count} file(s).",
+            "free_pct": free_pct,
+            "used_gb": used_gb,
+            "total_gb": total_gb,
+            "file_count": file_count,
+            "hint": "Low disk space — old uploads can be pruned." if not ok else None,
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "title": "Storage check failed", "detail": str(exc)}
+
+
+@router.get("/health")
+async def health_page(
+    request: Request,
+    user: User = Depends(require_web_roles(Role.admin)),
+    session: AsyncSession = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
+):
+    db = await _check_database(session)
+    windmill = await _check_windmill(settings)
+    smtp = _check_smtp(settings)
+    storage = _check_storage(settings)
+
+    # Recent failed audit events as a quick incident view
+    fail_actions = ("workflow.failed", "email.failed", "file.rejected")
+    failures = (
+        await session.execute(
+            select(AuditLog)
+            .where(AuditLog.action.in_(fail_actions))
+            .order_by(AuditLog.created_at.desc())
+            .limit(10)
+        )
+    ).scalars().all()
+
+    checks = [
+        {"key": "api",      "label": "API service", **{"ok": True, "title": "Running", "detail": "FastAPI rendered this page — the process is up."}},
+        {"key": "database", "label": "Database",    **db},
+        {"key": "windmill", "label": "Windmill",    **windmill},
+        {"key": "smtp",     "label": "SMTP",        **smtp},
+        {"key": "storage",  "label": "Storage",     **storage},
+    ]
+    overall_ok = all(c.get("ok") for c in checks)
+    overall_warn = any(c.get("warn") for c in checks)
+
+    context = _common_context(request, user, settings)
+    context.update(
+        {
+            "checks": checks,
+            "overall_ok": overall_ok,
+            "overall_warn": overall_warn,
+            "failures": failures,
+            "settings_summary": {
+                "environment": settings.environment,
+                "windmill_base_url": settings.windmill_base_url,
+                "windmill_workspace": settings.windmill_workspace,
+                "windmill_workflow_path": settings.windmill_workflow_path,
+                "ingest_callback_url": settings.ingest_callback_url,
+                "allowed_upload_extensions": settings.allowed_upload_extension_list,
+                "max_upload_mb": round(settings.max_upload_bytes / (1024 * 1024), 1),
+            },
+        }
+    )
+    return templates.TemplateResponse("health.html", context)
+
+
 async def _pipeline_live_context(session: AsyncSession, settings: Settings) -> dict:
     """Shared context for the full /pipeline page and the /pipeline/refresh partial."""
     runs = await _build_phase_runs(session, settings=settings, limit=12)

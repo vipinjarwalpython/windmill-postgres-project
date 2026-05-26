@@ -59,11 +59,32 @@
       <div>
         <h2 class="card-title">New upload</h2>
         <p class="card-subtitle">
-          Allowed: <strong>{{ allowed_extensions|join(", ") }}</strong> &middot;
+          Format: <strong>.csv</strong> only &middot;
           Max size: <strong>{{ max_upload_mb }} MB</strong>.
         </p>
       </div>
       <span class="badge {{ role_badge_class }}">{{ role_label }}</span>
+    </div>
+
+    <div class="csv-schema-note">
+      <div class="csv-schema-head">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><line x1="9" y1="13" x2="15" y2="13"/></svg>
+        <strong>Required CSV schema</strong>
+      </div>
+      <p class="csv-schema-desc">
+        The header row must contain these five columns (in any order, case-insensitive):
+      </p>
+      <div class="csv-schema-cols">
+        <code class="schema-col">id</code>
+        <code class="schema-col">department</code>
+        <code class="schema-col">employee_name</code>
+        <code class="schema-col">amount</code>
+        <code class="schema-col">date</code>
+      </div>
+      <p class="csv-schema-desc" style="margin-top:6px;">
+        <code class="mono">department</code> must be <code class="mono">finance</code>, <code class="mono">hr</code> or <code class="mono">sales</code>.
+        <code class="mono">date</code> uses <code class="mono">YYYY-MM-DD</code>. Save with <strong>UTF-8</strong> encoding (Excel → &ldquo;CSV UTF-8&rdquo;).
+      </p>
     </div>
 
     {% if success %}
@@ -78,8 +99,12 @@
 
     {% if error %}
     <div class="alert alert-error">
-      <strong>Upload failed.</strong>
+      <strong>Upload rejected.</strong>
       <span>{{ error }}</span>
+      <span class="alert-detail">
+        Nothing was stored and the Windmill workflow was <strong>not</strong> triggered.
+        Fix your file to match the schema above and try again.
+      </span>
     </div>
     {% endif %}
 
@@ -95,7 +120,7 @@
           id="file-input"
           name="file"
           required
-          accept="{{ allowed_extensions|join(',') }}"
+          accept=".csv,text/csv"
           hidden
         />
       </label>

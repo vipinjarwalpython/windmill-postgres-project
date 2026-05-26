@@ -45,18 +45,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h6"/></svg>
       <span>API Docs</span>
     </a>
-    <a class="sidebar-link" href="/health/live" target="_blank" rel="noopener">
+    <a class="sidebar-link {% if active == 'health' %}active{% endif %}" href="/health">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
       <span>Health</span>
     </a>
-
-    {% if user.role.value == 'admin' %}
-    <div class="sidebar-card">
-      <h4>Pipeline Tip</h4>
-      <p>Drop a CSV and we'll fan it out to finance, HR &amp; sales automatically.</p>
-      <a href="/uploads" class="btn btn-primary btn-sm">New upload</a>
-    </div>
-    {% endif %}
 
     <div class="sidebar-footer">
       <div class="sidebar-user">

@@ -3,7 +3,7 @@ from collections import defaultdict
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
-from sqlalchemy import select, tuple_
+from sqlalchemy import insert, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
@@ -19,6 +19,16 @@ router = APIRouter(prefix="/internal", tags=["internal"])
 # Two rows are the same record when their source row id and content all match.
 # Amounts are quantized to cents so they compare equal to the stored Numeric(12, 2) value.
 _CENTS = Decimal("0.01")
+
+# Postgres parses a tuple-IN `WHERE (a,b,c,d) IN ((...),(...),...)` clause into
+# a deep AND/OR expression tree. With ~30k tuples it blows the 2MB stack-depth
+# limit (asyncpg raises StatementTooComplexError). We batch the lookup so each
+# query stays well below that — 1000 tuples × 4 cols = 4000 parameters, fine.
+_DEDUP_BATCH = 1000
+
+# How many rows to send to Postgres in a single bulk INSERT statement.
+# Keeps the parameter count bounded for very large ingest payloads.
+_INSERT_BATCH = 1000
 
 
 def _verify_ingest_token(
@@ -36,6 +46,37 @@ def _verify_ingest_token(
 def _dedup_key(row: IngestRow) -> tuple:
     """Identity of a department record — rows with a matching key are duplicates."""
     return (row.source_row_id, row.employee_name, row.amount.quantize(_CENTS), row.record_date)
+
+
+async def _existing_keys(session: AsyncSession, model, keys: list[tuple]) -> set[tuple]:
+    """Return the subset of ``keys`` that already exist in ``model``, fetched in
+    safe-sized batches so the IN-tuple expression never overflows Postgres'
+    statement stack."""
+    seen: set[tuple] = set()
+    if not keys:
+        return seen
+    for start in range(0, len(keys), _DEDUP_BATCH):
+        chunk = keys[start : start + _DEDUP_BATCH]
+        result = await session.execute(
+            select(
+                model.source_row_id,
+                model.employee_name,
+                model.amount,
+                model.record_date,
+            ).where(
+                tuple_(
+                    model.source_row_id,
+                    model.employee_name,
+                    model.amount,
+                    model.record_date,
+                ).in_(chunk)
+            )
+        )
+        for source_row_id, employee_name, amount, record_date in result.all():
+            seen.add(
+                (source_row_id, employee_name, amount.quantize(_CENTS), record_date)
+            )
+    return seen
 
 
 @router.post(
@@ -64,44 +105,33 @@ async def ingest(
         model = DEPARTMENT_MODELS[department]
         keys = [_dedup_key(row) for row in rows]
 
-        # Pull keys that already exist in this department's table so re-uploads and
-        # workflow retries don't insert the same record twice.
-        existing = await session.execute(
-            select(
-                model.source_row_id,
-                model.employee_name,
-                model.amount,
-                model.record_date,
-            ).where(
-                tuple_(
-                    model.source_row_id,
-                    model.employee_name,
-                    model.amount,
-                    model.record_date,
-                ).in_(keys)
-            )
-        )
-        seen = {
-            (source_row_id, employee_name, amount.quantize(_CENTS), record_date)
-            for source_row_id, employee_name, amount, record_date in existing.all()
-        }
+        # Pull existing keys in batches so re-uploads and workflow retries
+        # don't insert the same record twice.
+        seen = await _existing_keys(session, model, keys)
 
+        # Build the to-insert list with within-payload dedup too.
+        to_insert: list[dict] = []
         for row, key in zip(rows, keys):
             if key in seen:
                 skipped[department] += 1
                 continue
-            # Adding to `seen` also skips duplicates within this same payload.
             seen.add(key)
-            session.add(
-                model(
-                    source_row_id=row.source_row_id,
-                    employee_name=row.employee_name,
-                    amount=row.amount,
-                    record_date=row.record_date,
-                    source_upload_id=payload.upload_id,
-                )
+            to_insert.append(
+                {
+                    "source_row_id": row.source_row_id,
+                    "employee_name": row.employee_name,
+                    "amount": row.amount,
+                    "record_date": row.record_date,
+                    "source_upload_id": payload.upload_id,
+                }
             )
-            inserted[department] += 1
+
+        # Bulk insert in batches — far faster than session.add() per row, and
+        # keeps the parameter count per statement bounded.
+        for start in range(0, len(to_insert), _INSERT_BATCH):
+            batch = to_insert[start : start + _INSERT_BATCH]
+            await session.execute(insert(model), batch)
+        inserted[department] = len(to_insert)
 
     total_inserted = sum(inserted.values())
     total_skipped = sum(skipped.values())

@@ -59,3 +59,13 @@ async def create_database_schema() -> None:
             await conn.execute(text("DROP TYPE IF EXISTS role CASCADE"))
 
         await conn.run_sync(Base.metadata.create_all)
+
+        # Dedup index on the natural key used by /internal/ingest. Without this
+        # the tuple-IN lookup on a populated table does a sequential scan, which
+        # is fine for small payloads but turns 100k-row retries into a minutes-
+        # long stall. IF NOT EXISTS so re-runs are no-ops.
+        for table in ("finance_data", "hr_data", "sales_data"):
+            await conn.execute(text(
+                f"CREATE INDEX IF NOT EXISTS ix_{table}_dedup "
+                f"ON {table} (source_row_id, employee_name, amount, record_date)"
+            ))
